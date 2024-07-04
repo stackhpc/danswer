@@ -7,7 +7,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    {{- .Values.indexCapability.updateStrategy | toYaml | nindent 4 }}
+    {{- .Values.indexCapability.deployment.updateStrategy | toYaml | nindent 4 }}
   selector:
     matchLabels:
       {{- include "danswer-stack.selectorLabels" . | nindent 6 }}
@@ -28,12 +28,12 @@ spec:
     spec:
       containers:
       - name: indexing-model-server
-        image: danswer/danswer-model-server:latest
-        imagePullPolicy: IfNotPresent
+        image: "{{ .Values.indexCapability.deployment.image.repository }}:{{ .Values.indexCapability.deployment.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.indexCapability.deployment.image.pullPolicy }}
         command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000", "--limit-concurrency", "10" ]
-        {{- if .Values.indexCapability.resources }}
+        {{- if .Values.indexCapability.deployment.resources }}
         resources:
-            {{- toYaml .Values.indexCapability.resources | nindent 10 }}
+            {{- toYaml .Values.indexCapability.deployment.resources | nindent 10 }}
         {{- end }}
         ports:
         - containerPort: 9000
