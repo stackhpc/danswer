@@ -42,7 +42,7 @@ export const basicLogin = async (
   return response;
 };
 
-export const basicSignup = async (email: string, password: string) => {
+export const basicSignup = async (email: string, password: string, role = "basic") => {
   const response = await fetch("/api/auth/register", {
     method: "POST",
     credentials: "include",
@@ -53,6 +53,7 @@ export const basicSignup = async (email: string, password: string) => {
       email,
       username: email,
       password,
+      role,
     }),
   });
   return response;
