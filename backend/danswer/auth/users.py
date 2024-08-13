@@ -204,12 +204,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> models.UP:
         verify_email_is_invited(user_create.email)
         verify_email_domain(user_create.email)
-        if hasattr(user_create, "role"):
-            user_count = await get_user_count()
-            if user_count == 0 or user_create.email in get_default_admin_user_emails():
-                user_create.role = UserRole.ADMIN
-            else:
-                user_create.role = UserRole.BASIC
+        # if hasattr(user_create, "role"):
+            # user_count = await get_user_count()
+            # if user_count == 0 or user_create.email in get_default_admin_user_emails():
+            #     user_create.role = UserRole.ADMIN
+            # else:
+            #     user_create.role = UserRole.BASIC
         return await super().create(user_create, safe=safe, request=request)  # type: ignore
 
     async def oauth_callback(
