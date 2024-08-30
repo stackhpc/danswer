@@ -6,12 +6,13 @@ on:
       - '*'
 
 env:
+  REGISTRY_NAME: ghcr.io/stackhpc
   REGISTRY_IMAGE: danswer/danswer-backend
 
 jobs:
   build-and-push:
     # TODO: make this a matrix build like the web containers
-    runs-on: 
+    runs-on:
       group: amd64-image-builders
 
     steps:
@@ -44,6 +45,6 @@ jobs:
       uses: aquasecurity/trivy-action@master
       with:
         # To run locally: trivy image --severity HIGH,CRITICAL danswer/danswer-backend
-        image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
+        image-ref: ${{ env.REGISTRY_NAME }}/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
         severity: 'CRITICAL,HIGH'
         trivyignores: ./backend/.trivyignore
