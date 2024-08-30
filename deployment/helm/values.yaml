@@ -124,7 +124,7 @@ nginx:
 webserver:
   replicaCount: 1
   image:
-    repository: danswer/danswer-web-server
+    repository: ghcr.io/stackhpc/danswer/danswer-web-server
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag:
@@ -187,7 +187,7 @@ webserver:
 api:
   replicaCount: 1
   image:
-    repository: danswer/danswer-backend
+    repository: ghcr.io/stackhpc/danswer/danswer-backend
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag:
