@@ -1,0 +1,40 @@
+apiVersion: v1
+entries:
+  danswer-stack:
+  - annotations:
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/danswer/danswer-web-server:latest
+        - name: background
+          image: docker.io/danswer/danswer-backend:latest
+        - name: vespa
+          image: vespaengine/vespa:8.277.17
+      licenses: MIT
+    apiVersion: v2
+    appVersion: v0.5.10
+    created: "2024-08-30T14:58:00.865177613Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: 14.3.1
+    - condition: vespa.enabled
+      name: vespa
+      repository: https://unoplat.github.io/vespa-helm-charts
+      version: 0.2.3
+    - condition: nginx.enabled
+      name: nginx
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 15.14.0
+    description: A Helm chart for Kubernetes
+    digest: cfcffcdd50757b2b5453fe9c26e7091bb7d20e3c01176a7bd94b8306f2a7c386
+    home: https://www.danswer.ai/
+    name: danswer-stack
+    sources:
+    - https://github.com/danswer-ai/danswer
+    type: application
+    urls:
+    - https://github.com/stackhpc/danswer/releases/download/danswer-helm-0.5.10/danswer-stack-0.5.10.tgz
+    version: 0.5.10
+generated: "2024-08-30T14:58:00.865188022Z"
