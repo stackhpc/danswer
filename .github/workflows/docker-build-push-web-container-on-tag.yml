@@ -6,12 +6,11 @@ on:
       - '*'
 
 env:
-  REGISTRY_IMAGE: danswer/danswer-web-server
+  REGISTRY_IMAGE: ghcr.io/stackhpc/danswer/danswer-web-server
 
 jobs:
   build:
-    runs-on: 
-      group: ${{ matrix.platform == 'linux/amd64' && 'amd64-image-builders' || 'arm64-image-builders' }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -23,11 +22,11 @@ jobs:
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV          
-      
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -36,16 +35,17 @@ jobs:
           tags: |
             type=raw,value=${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
             type=raw,value=${{ env.REGISTRY_IMAGE }}:latest
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Docker Hub
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-    
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v5
@@ -56,17 +56,17 @@ jobs:
           push: true
           build-args: |
             DANSWER_VERSION=${{ github.ref_name }}
-          # needed due to weird interactions with the builds for different platforms  
+          # needed due to weird interactions with the builds for different platforms
           no-cache: true
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-      
+
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"          
-      
+          touch "/tmp/digests/${digest#sha256:}"
+
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
@@ -86,28 +86,29 @@ jobs:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
-      
-      - name: Login to Docker Hub
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-      
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)          
-      
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
@@ -115,5 +116,5 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
+          image-ref: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
           severity: 'CRITICAL,HIGH'
