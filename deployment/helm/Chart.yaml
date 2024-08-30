@@ -3,9 +3,9 @@ name: danswer-stack
 description: A Helm chart for Kubernetes
 home: https://www.danswer.ai/
 sources:
-  - "https://github.com/danswer-ai/danswer"
+  - "https://github.com/stackhpc/danswer"
 type: application
-version: 0.5.10
+version: 0.5.10-remote-user-header
 appVersion: "v0.5.10"
 annotations:
   category: Productivity
