@@ -2,10 +2,10 @@ FROM python:3.11.7-slim-bookworm
 
 LABEL com.danswer.maintainer="founders@danswer.ai"
 LABEL com.danswer.description="This image is the web/frontend container of Danswer which \
-contains code for both the Community and Enterprise editions of Danswer. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@danswer.ai for more information. Please visit https://github.com/danswer-ai/danswer"
+    contains code for both the Community and Enterprise editions of Danswer. If you do not \
+    have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
+    Edition features outside of personal development or testing purposes. Please reach out to \
+    founders@danswer.ai for more information. Please visit https://github.com/danswer-ai/danswer"
 
 # Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
 ARG DANSWER_VERSION=0.3-dev
@@ -20,18 +20,18 @@ RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
 # ca-certificates for HTTPS
 RUN apt-get update && \
     apt-get install -y \
-        cmake \
-        curl \
-        zip \
-        ca-certificates \
-        libgnutls30=3.7.9-2+deb12u3 \
-        libblkid1=2.38.1-5+deb12u1 \
-        libmount1=2.38.1-5+deb12u1 \
-        libsmartcols1=2.38.1-5+deb12u1 \
-        libuuid1=2.38.1-5+deb12u1 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc && \
+    cmake \
+    curl \
+    zip \
+    ca-certificates \
+    libgnutls30=3.7.9-2+deb12u3 \
+    libblkid1=2.38.1-5+deb12u1 \
+    libmount1=2.38.1-5+deb12u1 \
+    libsmartcols1=2.38.1-5+deb12u1 \
+    libuuid1=2.38.1-5+deb12u1 \
+    libxmlsec1-dev \
+    pkg-config \
+    gcc && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -40,8 +40,8 @@ RUN apt-get update && \
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 RUN pip install --no-cache-dir --upgrade \
-        -r /tmp/requirements.txt \
-        -r /tmp/ee-requirements.txt && \
+    -r /tmp/requirements.txt \
+    -r /tmp/ee-requirements.txt && \
     pip uninstall -y py && \
     playwright install chromium && \
     playwright install-deps chromium && \
@@ -54,14 +54,14 @@ RUN pip install --no-cache-dir --upgrade \
 # perl-base could only be removed with --allow-remove-essential
 RUN apt-get update && \
     apt-get remove -y --allow-remove-essential \
-        perl-base \
-        xserver-common \
-        xvfb \
-        cmake \
-        libldap-2.5-0 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc && \
+    perl-base \
+    xserver-common \
+    xvfb \
+    cmake \
+    libldap-2.5-0 \
+    libxmlsec1-dev \
+    pkg-config \
+    gcc && \
     apt-get install -y libxmlsec1-openssl && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* && \
@@ -74,9 +74,9 @@ Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
 # Pre-downloading NLTK for setups with limited egress
 RUN python -c "import nltk; \
-nltk.download('stopwords', quiet=True); \
-nltk.download('wordnet', quiet=True); \
-nltk.download('punkt', quiet=True);"
+    nltk.download('stopwords', quiet=True); \
+    nltk.download('wordnet', quiet=True); \
+    nltk.download('punkt', quiet=True);"
 
 # Set up application files
 WORKDIR /app
@@ -97,6 +97,9 @@ COPY ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connect
 
 # Put logo in assets
 COPY ./assets /app/assets
+
+# Include the license in the modified image
+COPY . ../LICENSE
 
 ENV PYTHONPATH /app
 
