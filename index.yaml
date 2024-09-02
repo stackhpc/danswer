@@ -84,6 +84,42 @@ entries:
           image: vespaengine/vespa:8.277.17
       licenses: MIT
     apiVersion: v2
+    appVersion: v0.5.10-stackhpc.1
+    created: "2024-09-02T14:14:26.648578786Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: 14.3.1
+    - condition: vespa.enabled
+      name: vespa
+      repository: https://unoplat.github.io/vespa-helm-charts
+      version: 0.2.3
+    - condition: nginx.enabled
+      name: nginx
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 15.14.0
+    description: A Helm chart for Kubernetes
+    digest: ea26184c3c325f4c9bd123d874bb41c4858368f848e0ed88f2d5b4203f2e6a62
+    home: https://www.danswer.ai/
+    name: danswer-stack
+    sources:
+    - https://github.com/danswer-ai/danswer
+    type: application
+    urls:
+    - https://github.com/stackhpc/danswer/releases/download/danswer-helm-0.5.10-stackhpc.1/danswer-stack-0.5.10-stackhpc.1.tgz
+    version: 0.5.10-stackhpc.1
+  - annotations:
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/danswer/danswer-web-server:latest
+        - name: background
+          image: docker.io/danswer/danswer-backend:latest
+        - name: vespa
+          image: vespaengine/vespa:8.277.17
+      licenses: MIT
+    apiVersion: v2
     appVersion: v0.5.10
     created: "2024-08-30T15:08:31.789188874Z"
     dependencies:
@@ -109,4 +145,4 @@ entries:
     urls:
     - https://github.com/stackhpc/danswer/releases/download/danswer-helm-0.5.10-remote-user-header/danswer-stack-0.5.10-remote-user-header.tgz
     version: 0.5.10-remote-user-header
-generated: "2024-09-02T09:21:41.887028502Z"
+generated: "2024-09-02T14:14:26.64859723Z"
