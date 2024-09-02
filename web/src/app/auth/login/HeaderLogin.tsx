@@ -5,6 +5,7 @@ import { basicLogin, basicSignup } from "@/lib/user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Spinner } from "@/components/Spinner";
+import { v4 as uuidv4 } from 'uuid';
 
 export function HeaderLoginLoading({
     user, groups
@@ -17,7 +18,7 @@ export function HeaderLoginLoading({
     const router = useRouter();
     const { popup, setPopup } = usePopup();
     const email = `${user}@default.com`;
-    const password = `not-used-${window.crypto.randomUUID()}`
+    const password = `not-used-${uuidv4()}`
     const role = groups.includes("/admins") ? "admin" : "basic"
 
     async function tryLogin() {
