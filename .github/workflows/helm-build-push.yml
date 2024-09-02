@@ -23,6 +23,10 @@ jobs:
         run: yq .version deployment/helm/Chart.yaml | grep -v '[a-zA-Z-]'
         if: ${{ github.ref_name == 'main'}}
 
+      - name: Fail on stable semver release chart version
+        run: yq .version deployment/helm/Chart.yaml | grep '[a-zA-Z-]'
+        if: ${{ github.ref_name != 'main'}}
+
       - name: Fail if image tags don't exist
         run: >-
          curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
@@ -56,7 +60,10 @@ jobs:
         with:
           charts_dir: deployment
           pages_branch: helm-publish
+          # Only mark main branch releases as latest
           mark_as_latest: ${{ github.ref_name == 'main' }}
+          # Allow overwriting of old versions on non-main branches
+          skip_existing: ${{ github.ref_name == 'main' }}
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_RELEASE_NAME_TEMPLATE: "danswer-helm-{{ .Version }}"
