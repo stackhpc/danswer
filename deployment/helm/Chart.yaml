@@ -5,8 +5,8 @@ home: https://www.danswer.ai/
 sources:
   - "https://github.com/danswer-ai/danswer"
 type: application
-version: 0.5.10-stackhpc.1
-appVersion: "v0.5.10"
+version: 0.5.10
+appVersion: v0.5.10-stackhpc.1
 annotations:
   category: Productivity
   licenses: MIT
