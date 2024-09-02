@@ -19,15 +19,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      # We publish our 'release' Semver tags as X.Y.Z-stackhpc.[1-9]+
-      # so if main branch chart version doesn't match this then abort
-      - name: Fail on dev chart version
-        run: yq .version deployment/helm/Chart.yaml | grep "\-stackhpc.[0-9]\+$"
+      - name: Fail on semver pre-release chart version
+        run: yq .version deployment/helm/Chart.yaml | grep -v '[a-zA-Z-]'
         if: ${{ github.ref_name == 'main'}}
 
-      # Stable 'release' image tags should be of the form "v<upstream-semver>-stackhpc.X"
-      - name: Fail on dev image version
-        run: yq .appVersion deployment/helm/Chart.yaml | grep "^v[0-9]" | grep "\-stackhpc.[0-9]\+$"
+      - name: Fail if image tags don't exist
+        run: >-
+         curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
+         https://ghcr.io/v2/stackhpc/danswer/danswer-backend/tags/list
+         | jq .tags
+         | grep $( yq .appVersion deployment/helm/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
+         &&
+         curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
+         https://ghcr.io/v2/stackhpc/danswer/danswer-web-server/tags/list
+         | jq .tags
+         | grep $( yq .appVersion deployment/helm/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
         if: ${{ github.ref_name == 'main'}}
 
       - name: Configure Git
