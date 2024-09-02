@@ -12,7 +12,7 @@ appVersionOverride: # e.g "v0.3.93"
 # The full image ref will be:
 # {{ image-name }}:{{ image-tag or appVersion }}-{{ tagSuffix }}
 # tagSuffix: stackhpc.1
-tagSuffix: stackhpc-remote-user-header.1
+tagSuffix: stackhpc-remote-user-header.2
 
 inferenceCapability:
   service:
