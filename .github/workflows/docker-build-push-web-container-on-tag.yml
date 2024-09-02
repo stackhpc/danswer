@@ -59,6 +59,7 @@ jobs:
           # needed due to weird interactions with the builds for different platforms
           no-cache: true
           labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
