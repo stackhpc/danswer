@@ -22,7 +22,7 @@ jobs:
       # We publish our 'release' Semver tags as X.Y.Z-stackhpc.[1-9]+
       # so if main branch chart version doesn't match this then abort
       - name: Fail on dev chart version
-        run: yq .version deployment/helm/Chart.yaml | grep "-stackhpc."
+        run: yq .version deployment/helm/Chart.yaml | grep "\-stackhpc."
         if: ${{ github.ref_name == 'main'}}
 
       - name: Configure Git
