@@ -38,8 +38,8 @@ jobs:
           ${{ env.REGISTRY_IMAGE }}:latest
         build-args: |
           DANSWER_VERSION=${{ github.ref_name }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:buildcache
+        cache-to: type=registry,ref=${{ env.REGISTRY_IMAGE}}:buildcache,mode=max
 
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
