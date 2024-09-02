@@ -19,15 +19,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fail on semver pre-release chart version
+      - name: Fail if publishing pre-release on main branch
         run: yq .version deployment/helm/Chart.yaml | grep -v '[a-zA-Z-]'
         if: ${{ github.ref_name == 'main'}}
 
-      - name: Fail on stable semver release chart version
+      - name: Fail if publishing stable release on dev branch
         run: yq .version deployment/helm/Chart.yaml | grep '[a-zA-Z-]'
         if: ${{ github.ref_name != 'main'}}
 
-      - name: Fail if image tags don't exist
+      - name: Fail if required images haven't been built
         run: >-
          curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
          https://ghcr.io/v2/stackhpc/danswer/danswer-backend/tags/list
