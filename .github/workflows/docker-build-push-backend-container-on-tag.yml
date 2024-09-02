@@ -35,7 +35,7 @@ jobs:
         push: true
         tags: |
           ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-          ${{ env.REGISTRY_IMAGE }}:latest
+          ${{ github.ref == 'refs/heads/main' && format('type=raw,value={0}:latest', env.REGISTRY_IMAGE) }}
         build-args: |
           DANSWER_VERSION=${{ github.ref_name }}
         cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:buildcache
