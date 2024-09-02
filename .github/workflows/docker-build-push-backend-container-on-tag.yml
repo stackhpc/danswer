@@ -26,6 +26,15 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY_IMAGE }}
+        tags: |
+          type=raw,value=${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
+          type=raw,value=${{ env.REGISTRY_IMAGE }}:latest,enable=${{ github.ref == 'refs/heads/main' }}
+
     - name: Backend Image Docker Build and Push
       uses: docker/build-push-action@v5
       with:
@@ -33,9 +42,7 @@ jobs:
         file: ./backend/Dockerfile
         platforms: linux/amd64,linux/arm64
         push: true
-        tags: |
-          ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-          ${{ env.REGISTRY_IMAGE }}:latest
+        tags: ${{ steps.meta.outputs.tags }}
         build-args: |
           DANSWER_VERSION=${{ github.ref_name }}
         cache-from: type=registry,ref=${{ env.REGISTRY_IMAGE }}:buildcache
