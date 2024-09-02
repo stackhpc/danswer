@@ -34,7 +34,6 @@ jobs:
          https://ghcr.io/v2/stackhpc/danswer/danswer-web-server/tags/list
          | jq .tags
          | grep $( yq .appVersion deployment/helm/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
-        if: ${{ github.ref_name == 'main'}}
 
       - name: Configure Git
         run: |
