@@ -19,6 +19,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # We publish our 'release' Semver tags as X.Y.Z-stackhpc.[1-9]+
+      # so if main branch chart version doesn't match this then abort
+      - name: Fail on dev chart version
+        run: yq .version deployment/helm/Chart.yaml | grep "-stackhpc."
+        if: ${{ github.ref_name == 'main'}}
+
       - name: Configure Git
         run: |
           git config user.name "$GITHUB_ACTOR"
