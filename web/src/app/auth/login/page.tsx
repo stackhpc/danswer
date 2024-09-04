@@ -14,6 +14,8 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { LoginText } from "./LoginText";
 import { getSecondsUntilExpiration } from "@/lib/time";
+import { headers } from 'next/headers';
+import { HeaderLoginLoading } from "./HeaderLogin";
 
 const Page = async ({
   searchParams,
@@ -69,6 +71,9 @@ const Page = async ({
     return redirect(authUrl);
   }
 
+  const userHeader = headers().get('x-remote-user');
+  const groupsHeader = headers().get('x-remote-group');
+
   return (
     <main>
       <div className="absolute top-10x w-full">
@@ -90,23 +95,25 @@ const Page = async ({
             </>
           )}
           {authTypeMetadata?.authType === "basic" && (
-            <Card className="mt-4 w-96">
-              <div className="flex">
-                <Title className="mb-2 mx-auto font-bold">
-                  <LoginText />
-                </Title>
-              </div>
-              <EmailPasswordForm />
-              <div className="flex">
-                <Text className="mt-4 mx-auto">
-                  Don&apos;t have an account?{" "}
-                  <Link href="/auth/signup" className="text-link font-medium">
-                    Create an account
-                  </Link>
-                </Text>
-              </div>
-            </Card>
-          )}
+            (userHeader && groupsHeader) ?
+              <HeaderLoginLoading user={userHeader} groups={groupsHeader.split(',')} /> : (
+                <Card className="mt-4 w-96">
+                  <div className="flex">
+                    <Title className="mb-2 mx-auto font-bold">
+                      <LoginText />
+                    </Title>
+                  </div>
+                  <EmailPasswordForm />
+                  <div className="flex">
+                    <Text className="mt-4 mx-auto">
+                      Don&apos;t have an account?{" "}
+                      <Link href="/auth/signup" className="text-link font-medium">
+                        Create an account
+                      </Link>
+                    </Text>
+                  </div>
+                </Card>
+              ))}
         </div>
       </div>
     </main>
