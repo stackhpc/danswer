@@ -24,16 +24,15 @@ jobs:
           # git diff HEAD~1 deployment/helm/Chart.yaml
           # changed=$(git diff HEAD~1 deployment/helm/Chart.yaml | grep --silent "^+version: " && echo true)
           # echo $changed
-          # echo chart_version_changed=$changed >> $GITHUB_OUTPUTS
+          # echo chart_version_changed=$changed >> $GITHUB_OUTPUT
 
           # Check if current chart version exists in releases
           chart_version=$(yq .version deployment/helm/Chart.yaml)
           if [[ $(curl https://api.github.com/repos/stackhpc/danswer/releases | jq '.[].tag_name' | grep danswer-helm-$chart_version) ]]; then
-            echo chart_version_changed=false >> $GITHUB_OUTPUTS
+            echo chart_version_changed=false >> $GITHUB_OUTPUT
           else
-            echo chart_version_changed=true >> $GITHUB_OUTPUTS
+            echo chart_version_changed=true >> $GITHUB_OUTPUT
           fi
-
 
   release:
     # depending on default permission settings for your org (contents being read-only or read-write for workloads), you will have to add permissions
