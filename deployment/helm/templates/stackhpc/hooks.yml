@@ -1,0 +1,163 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-danswer-fixup
+  namespace: {{ .Release.Name }}
+  annotations:
+    # Need to keep around for post-delete hooks
+    helm.sh/resource-policy: keep
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - delete
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  - deployments
+  verbs:
+  - get
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-danswer-fixup
+  namespace: {{ .Release.Name }}
+  annotations:
+    # Need to keep around for post-delete hooks
+    helm.sh/resource-policy: keep
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-danswer-fixup
+subjects:
+# Namespace is unique to Azimuth app so using default
+# service account is fine.
+- kind: ServiceAccount
+  name: default
+  namespace: {{ .Release.Name }}
+---
+# Delete stateful set PVCs since upstream Helm chart doesn't expose this config option
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pvc-cleanup
+  namespace: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: post-delete
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: pvc-deleter
+        image: gcr.io/google_containers/hyperkube:v1.18.0
+        command:
+        - kubectl
+        - delete
+        - -n
+        - {{ .Release.Name }}
+        - pvc
+        - --all
+      restartPolicy: Never
+      serviceAccountName: default
+---
+# Until https://github.com/unoplat/vespa-helm-charts/pull/23
+# is merged, we need to patch vespa stateful set after deployment
+# so that service label selectors match correctly.
+# Since Danswer API pod gives up on Vespa application package
+# init request after just 5 retries we also need to restart the API
+# deployment to trigger a retry on the Vespa setup by the API pod
+# after labels are corrected.
+# Use three separate hooks with different hook-weights to control ordering.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vespa-label-updater
+  namespace: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,post-rollback
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: label-updater
+        image: gcr.io/google_containers/hyperkube:v1.18.0
+        command:
+        - kubectl
+        - patch
+        - -n
+        - {{ .Release.Name }}
+        - statefulset/vespa
+        - -p
+        - {{ printf "{'spec':{'template':{'metadata':{'labels':{'app.kubernetes.io/instance':'%s'}}}}}" .Release.Name | replace "'" "\"" | squote }}
+      restartPolicy: Never
+      serviceAccountName: default
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vespa-waiter
+  namespace: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,post-rollback
+    helm.sh/hook-weight: "2"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: waiter
+        image: gcr.io/google_containers/hyperkube:v1.18.0
+        command:
+        - kubectl
+        - wait
+        - -n
+        - {{ .Release.Name }}
+        - --for=condition=Ready
+        - pod/vespa-0
+      restartPolicy: Never
+      serviceAccountName: default
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: danswer-api-restarter
+  namespace: {{ .Release.Name }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade,post-rollback
+    helm.sh/hook-weight: "3"
+    helm.sh/hook-delete-policy: hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+      - name: restarter
+        image: gcr.io/google_containers/hyperkube:v1.18.0
+        command:
+        - kubectl
+        - rollout
+        - restart
+        - -n
+        - {{ .Release.Name }}
+        - {{ printf "deployment/%s-danswer-stack-api-deployment" .Release.Name }}
+      restartPolicy: Never
+      serviceAccountName: default

@@ -2,27 +2,56 @@ name: Publish Danswer Helm Chart
 
 on:
   push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
+  helm_chart_version_check:
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.version_check.outputs.chart_version_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Check if current chart version exists in releases already
+      - name: Check for Helm chart version bump
+        id: version_check
+        run: |
+          set -xe
+          chart_version=$(yq .version deployment/helm/Chart.yaml)
+          if [[ $(curl https://api.github.com/repos/stackhpc/danswer/releases | jq '.[].tag_name' | grep danswer-helm-$chart_version) ]]; then
+            echo chart_version_changed=false >> $GITHUB_OUTPUT
+          else
+            echo chart_version_changed=true >> $GITHUB_OUTPUT
+          fi
+
   release:
     # depending on default permission settings for your org (contents being read-only or read-write for workloads), you will have to add permissions
     # see: https://docs.github.com/en/actions/security-guides/automatic-token-authentication#modifying-the-permissions-for-the-github_token
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    needs: helm_chart_version_check
+    if: ${{ needs.helm_chart_version_check.outputs.version_changed == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # We mark any builds on main branch as latest GH release
+      # so make sure we don't accidentally use a pre-release tag.
       - name: Fail on semver pre-release chart version
         run: yq .version deployment/helm/Chart.yaml | grep -v '[a-zA-Z-]'
-        if: ${{ github.ref_name == 'main'}}
+        if: ${{ github.ref_name == 'main' }}
 
+      # To reduce resource usage images are built only on tag.
+      # To build a new set of images after committing and pushing
+      # new changes to GitHub, use:
+      # git tag <tag-name>
+      # git push --tags
       - name: Fail if image tags don't exist
         run: >-
          curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
