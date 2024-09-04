@@ -8,11 +8,16 @@ fullnameOverride: ""
 appVersionOverride: # e.g "v0.3.93"
 
 # The suffix to add to the backend and web-server image
-# tags to refer to downstream image modifications.
+# tags to refer to downstream StackHPC-modified images.
 # The full image ref will be:
 # {{ image-name }}:{{ image-tag or appVersion }}-{{ tagSuffix }}
 # tagSuffix: stackhpc.1
 tagSuffix: stackhpc-remote-user-header.2
+
+zenithClient:
+  iconUrl: https://raw.githubusercontent.com/danswer-ai/danswer/1fabd9372d66cd54238847197c33f091a724803b/Danswer.png
+  description:
+  label: "Danswer"
 
 inferenceCapability:
   service:
@@ -119,6 +124,9 @@ nginx:
     - name: DOMAIN
       value: localhost
   service:
+    # Don't need external service since service
+    # will be exposed via Zenith tunnel
+    type: ClusterIP
     ports:
       http: 80
       danswer: 3000
@@ -355,6 +363,18 @@ vespa:
   tolerations: []
   affinity: {}
 
+  service:
+    type: ClusterIP
+  volumeClaimTemplates:
+    - metadata:
+        name: vespa-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+
 
 #ingress:
 #  enabled: false
@@ -409,7 +429,7 @@ auth:
     danswer_bot_slack_bot_token: ""
 
 configMap:
-  AUTH_TYPE: "disabled"  # Change this for production uses unless Danswer is only accessible behind VPN
+  AUTH_TYPE: "basic"  # Basic auth required for x-remote-user header integration
   SESSION_EXPIRE_TIME_SECONDS: "86400"  # 1 Day Default
   VALID_EMAIL_DOMAINS: ""  # Can be something like danswer.ai, as an extra double-check
   SMTP_SERVER: "" # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
@@ -429,7 +449,7 @@ configMap:
   QA_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""
   DISABLE_LLM_DOC_RELEVANCE: ""
-  DISABLE_LLM_CHOOSE_SEARCH: ""
+  DISABLE_LLM_CHOOSE_SEARCH: true
   DISABLE_LLM_QUERY_REPHRASE: ""
   # Query Options
   DOC_TIME_DECAY: ""
@@ -470,7 +490,7 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   # https://docs.danswer.dev/more/telemetry
-  DISABLE_TELEMETRY: ""
+  DISABLE_TELEMETRY: true
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""
   LOG_DANSWER_MODEL_INTERACTIONS: ""
