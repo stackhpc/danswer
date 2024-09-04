@@ -1,0 +1,13 @@
+apiVersion: zenith.stackhpc.com/v1alpha1
+kind: Reservation
+metadata:
+  name: {{ include "danswer-stack.fullname" . }}
+  labels: {{ include "danswer-stack.labels" . | nindent 4 }}
+  annotations:
+    azimuth.stackhpc.com/service-label: {{ quote .Values.zenithClient.label }}
+    azimuth.stackhpc.com/service-icon-url: {{ .Values.zenithClient.iconUrl }}
+    {{- with .Values.zenithClient.description }}
+    azimuth.stackhpc.com/service-description: {{ quote . }}
+    {{- end }}
+spec:
+  credentialSecretName: {{ include "danswer-stack.fullname" . }}-credential
