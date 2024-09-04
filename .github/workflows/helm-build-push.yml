@@ -2,8 +2,6 @@ name: Publish Danswer Helm Chart
 
 on:
   push:
-    branches:
-      - "*"
   workflow_dispatch:
 
 jobs:
@@ -13,14 +11,18 @@ jobs:
       version_changed: ${{ steps.version_check.outputs.chart_version_changed }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Check for Helm chart version bump
         id: version_check
         run: |
+          set -xe
+          git log -n3
+          git diff HEAD~1 deployment/helm/Chart.yaml
           changed=$(git diff HEAD~1 deployment/helm/Chart.yaml | grep --silent "^+version: " && echo true)
+          echo $changed
           echo chart_version_changed=$changed >> $GITHUB_OUTPUTS
 
   release:
@@ -33,7 +35,7 @@ jobs:
     if: ${{ needs.check_for_helm_chart_version_change.outputs.version_changed == 'true' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
