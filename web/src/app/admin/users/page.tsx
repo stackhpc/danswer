@@ -104,7 +104,7 @@ const UsersTables = ({
 
   return (
     <>
-      <HidableSection sectionTitle="Invited Users">
+      {/* <HidableSection sectionTitle="Invited Users">
         {invited.length > 0 ? (
           finalInvited.length > 0 ? (
             <InvitedUserTable
@@ -124,7 +124,7 @@ const UsersTables = ({
         ) : (
           <ValidDomainsDisplay validDomains={validDomains} />
         )}
-      </HidableSection>
+      </HidableSection> */}
       <SignedUpUserTable
         users={accepted}
         setPopup={setPopup}
@@ -148,7 +148,7 @@ const SearchableTables = () => {
 
       <div className="flex flex-col gap-y-4">
         <div className="flex gap-x-4">
-          <AddUserButton setPopup={setPopup} />
+          {/* <AddUserButton setPopup={setPopup} /> */}
           <div className="flex-grow">
             <SearchBar
               query={query}
