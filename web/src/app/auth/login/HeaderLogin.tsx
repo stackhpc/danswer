@@ -16,6 +16,8 @@ export function HeaderLoginLoading({
 
     const router = useRouter();
     const { popup, setPopup } = usePopup();
+    // NOTE: As long as Danswer is only ever exposed
+    // via Zenith then these credentials are irrelevant.
     const email = `${user}@default.com`;
     const password = `not-used-${user}`
     const role = groups.includes("/admins") ? "admin" : "basic"
