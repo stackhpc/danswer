@@ -94,6 +94,7 @@ const Page = async ({
               />
             </>
           )}
+          {/* TODO: Make header login it's own auth type */}
           {authTypeMetadata?.authType === "basic" && (
             (userHeader && groupsHeader) ?
               <HeaderLoginLoading user={userHeader} groups={groupsHeader.split(',')} /> : (

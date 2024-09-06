@@ -11,7 +11,7 @@ appVersionOverride: # e.g "v0.3.93"
 # tags to refer to downstream StackHPC-modified images.
 # The full image ref will be:
 # {{ image-name }}:{{ image-tag or appVersion }}-{{ tagSuffix }}
-tagSuffix: stackhpc.3
+tagSuffix: stackhpc.4
 
 zenithClient:
   iconUrl: https://raw.githubusercontent.com/danswer-ai/danswer/1fabd9372d66cd54238847197c33f091a724803b/Danswer.png
