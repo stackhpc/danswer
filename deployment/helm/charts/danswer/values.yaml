@@ -114,7 +114,7 @@ postgresql:
   auth:
     existingSecret: danswer-secrets
     secretKeys:
-      adminPasswordKey: postgres_password #overwriting as postgres typically expects 'postgres-password'
+      adminPasswordKey: postgres_password  # overwriting as postgres typically expects 'postgres-password'
 
 nginx:
   containerPorts:
@@ -375,7 +375,7 @@ vespa:
             storage: 10Gi
 
 
-#ingress:
+# ingress:
 #  enabled: false
 #  className: ""
 #  annotations: {}
@@ -403,47 +403,43 @@ persistence:
 auth:
   # for storing smtp, oauth, slack, and other secrets
   # keys are lowercased version of env vars (e.g. SMTP_USER -> smtp_user)
-  existingSecret: "" # danswer-secrets
+  existingSecret: ""  # danswer-secrets
   # optionally override the secret keys to reference in the secret
+  # this is used to populate the env vars in individual deployments
+  # the values here reference the keys in secrets below
   secretKeys:
     postgres_password: "postgres_password"
     smtp_pass: ""
     oauth_client_id: ""
     oauth_client_secret: ""
     oauth_cookie_secret: ""
-    gen_ai_api_key: ""
     danswer_bot_slack_app_token: ""
     danswer_bot_slack_bot_token: ""
+    redis_password: "redis_password"
   # will be overridden by the existingSecret if set
   secretName: "danswer-secrets"
   # set values as strings, they will be base64 encoded
+  # this is used to populate the secrets yaml
   secrets:
     postgres_password: "postgres"
     smtp_pass: ""
     oauth_client_id: ""
     oauth_client_secret: ""
     oauth_cookie_secret: ""
-    gen_ai_api_key: ""
     danswer_bot_slack_app_token: ""
     danswer_bot_slack_bot_token: ""
+    redis_password: "password"
 
 configMap:
   AUTH_TYPE: "basic"  # Basic auth required for x-remote-user header integration
   SESSION_EXPIRE_TIME_SECONDS: "86400"  # 1 Day Default
   VALID_EMAIL_DOMAINS: ""  # Can be something like danswer.ai, as an extra double-check
-  SMTP_SERVER: "" # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
-  SMTP_PORT: "" # For sending verification emails, if unspecified then defaults to '587'
+  SMTP_SERVER: ""  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  SMTP_PORT: ""  # For sending verification emails, if unspecified then defaults to '587'
   SMTP_USER: ""  # 'your-email@company.com'
   # SMTP_PASS: ""  # 'your-gmail-password'
   EMAIL_FROM: ""  # 'your-email@company.com' SMTP_USER missing used instead
   # Gen AI Settings
-  GEN_AI_MODEL_PROVIDER: ""
-  GEN_AI_MODEL_VERSION: ""
-  FAST_GEN_AI_MODEL_VERSION: ""
-  # GEN_AI_API_KEY: ""
-  GEN_AI_API_ENDPOINT: ""
-  GEN_AI_API_VERSION: ""
-  GEN_AI_LLM_PROVIDER_TYPE: ""
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
   MAX_CHUNKS_FED_TO_CHAT: ""

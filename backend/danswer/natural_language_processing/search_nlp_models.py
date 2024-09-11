@@ -24,6 +24,8 @@ from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
+from shared_configs.model_server_models import ConnectorClassificationRequest
+from shared_configs.model_server_models import ConnectorClassificationResponse
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
@@ -90,6 +92,7 @@ class EmbeddingModel:
         query_prefix: str | None,
         passage_prefix: str | None,
         api_key: str | None,
+        api_url: str | None,
         provider_type: EmbeddingProvider | None,
         retrim_content: bool = False,
     ) -> None:
@@ -100,6 +103,7 @@ class EmbeddingModel:
         self.normalize = normalize
         self.model_name = model_name
         self.retrim_content = retrim_content
+        self.api_url = api_url
         self.tokenizer = get_tokenizer(
             model_name=model_name, provider_type=provider_type
         )
@@ -157,6 +161,7 @@ class EmbeddingModel:
                 text_type=text_type,
                 manual_query_prefix=self.query_prefix,
                 manual_passage_prefix=self.passage_prefix,
+                api_url=self.api_url,
             )
 
             response = self._make_model_server_request(embed_request)
@@ -226,6 +231,7 @@ class EmbeddingModel:
             passage_prefix=search_settings.passage_prefix,
             api_key=search_settings.api_key,
             provider_type=search_settings.provider_type,
+            api_url=search_settings.api_url,
             retrim_content=retrim_content,
         )
 
@@ -236,6 +242,7 @@ class RerankingModel:
         model_name: str,
         provider_type: RerankerProvider | None,
         api_key: str | None,
+        api_url: str | None,
         model_server_host: str = MODEL_SERVER_HOST,
         model_server_port: int = MODEL_SERVER_PORT,
     ) -> None:
@@ -244,6 +251,7 @@ class RerankingModel:
         self.model_name = model_name
         self.provider_type = provider_type
         self.api_key = api_key
+        self.api_url = api_url
 
     def predict(self, query: str, passages: list[str]) -> list[float]:
         rerank_request = RerankRequest(
@@ -252,6 +260,7 @@ class RerankingModel:
             model_name=self.model_name,
             provider_type=self.provider_type,
             api_key=self.api_key,
+            api_url=self.api_url,
         )
 
         response = requests.post(
@@ -297,6 +306,37 @@ class QueryAnalysisModel:
         return response_model.is_keyword, response_model.keywords
 
 
+class ConnectorClassificationModel:
+    def __init__(
+        self,
+        model_server_host: str = MODEL_SERVER_HOST,
+        model_server_port: int = MODEL_SERVER_PORT,
+    ):
+        model_server_url = build_model_server_url(model_server_host, model_server_port)
+        self.connector_classification_endpoint = (
+            model_server_url + "/custom/connector-classification"
+        )
+
+    def predict(
+        self,
+        query: str,
+        available_connectors: list[str],
+    ) -> list[str]:
+        connector_classification_request = ConnectorClassificationRequest(
+            available_connectors=available_connectors,
+            query=query,
+        )
+        response = requests.post(
+            self.connector_classification_endpoint,
+            json=connector_classification_request.dict(),
+        )
+        response.raise_for_status()
+
+        response_model = ConnectorClassificationResponse(**response.json())
+
+        return response_model.connectors
+
+
 def warm_up_retry(
     func: Callable[..., Any],
     tries: int = 20,
@@ -312,8 +352,8 @@ def warm_up_retry(
                 return func(*args, **kwargs)
             except Exception as e:
                 exceptions.append(e)
-                logger.exception(
-                    f"Attempt {attempt + 1} failed; retrying in {delay} seconds..."
+                logger.info(
+                    f"Attempt {attempt + 1}/{tries} failed; retrying in {delay} seconds..."
                 )
                 time.sleep(delay)
         raise Exception(f"All retries failed: {exceptions}")
@@ -363,6 +403,7 @@ def warm_up_cross_encoder(
     reranking_model = RerankingModel(
         model_name=rerank_model_name,
         provider_type=None,
+        api_url=None,
         api_key=None,
     )
 
