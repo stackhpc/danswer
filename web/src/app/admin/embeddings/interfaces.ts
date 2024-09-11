@@ -4,12 +4,14 @@ import { NonNullChain } from "typescript";
 export interface RerankingDetails {
   rerank_model_name: string | null;
   rerank_provider_type: RerankerProvider | null;
-  api_key: string | null;
+  rerank_api_key: string | null;
+  rerank_api_url: string | null;
   num_rerank: number;
 }
 
 export enum RerankerProvider {
   COHERE = "cohere",
+  LITELLM = "litellm",
 }
 export interface AdvancedSearchConfiguration {
   model_name: string;
@@ -21,6 +23,7 @@ export interface AdvancedSearchConfiguration {
   multipass_indexing: boolean;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
+  api_url: string | null;
 }
 
 export interface SavedSearchSettings extends RerankingDetails {
@@ -33,12 +36,13 @@ export interface SavedSearchSettings extends RerankingDetails {
   multipass_indexing: boolean;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
+  api_url: string | null;
   provider_type: EmbeddingProvider | null;
 }
 
 export interface RerankingModel {
   rerank_provider_type: RerankerProvider | null;
-  modelName: string;
+  modelName?: string;
   displayName: string;
   description: string;
   link: string;
@@ -46,6 +50,13 @@ export interface RerankingModel {
 }
 
 export const rerankingModels: RerankingModel[] = [
+  {
+    rerank_provider_type: RerankerProvider.LITELLM,
+    cloud: true,
+    displayName: "LiteLLM",
+    description: "Host your own reranker or router with LiteLLM proxy",
+    link: "https://docs.litellm.ai/docs/proxy",
+  },
   {
     rerank_provider_type: null,
     cloud: false,

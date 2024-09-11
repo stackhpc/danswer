@@ -61,7 +61,7 @@ from shared_configs.enums import RerankerProvider
 
 
 class Base(DeclarativeBase):
-    pass
+    __abstract__ = True
 
 
 class EncryptedString(TypeDecorator):
@@ -157,6 +157,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     notifications: Mapped[list["Notification"]] = relationship(
         "Notification", back_populates="user"
     )
+    # Whether the user has logged in via web. False if user has only used Danswer through Slack bot
+    has_web_login: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class InputPrompt(Base):
@@ -448,7 +450,7 @@ class Document(Base):
     )
     tags = relationship(
         "Tag",
-        secondary="document__tag",
+        secondary=Document__Tag.__table__,
         back_populates="documents",
     )
 
@@ -465,7 +467,7 @@ class Tag(Base):
 
     documents = relationship(
         "Document",
-        secondary="document__tag",
+        secondary=Document__Tag.__table__,
         back_populates="tags",
     )
 
@@ -576,6 +578,8 @@ class SearchSettings(Base):
         Enum(RerankerProvider, native_enum=False), nullable=True
     )
     rerank_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    rerank_api_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
     num_rerank: Mapped[int] = mapped_column(Integer, default=NUM_POSTPROCESSED_RESULTS)
 
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
@@ -606,6 +610,10 @@ class SearchSettings(Base):
     def __repr__(self) -> str:
         return f"<EmbeddingModel(model_name='{self.model_name}', status='{self.status}',\
           cloud_provider='{self.cloud_provider.provider_type if self.cloud_provider else 'None'}')>"
+
+    @property
+    def api_url(self) -> str | None:
+        return self.cloud_provider.api_url if self.cloud_provider is not None else None
 
     @property
     def api_key(self) -> str | None:
@@ -671,7 +679,11 @@ class IndexAttempt(Base):
         "SearchSettings", back_populates="index_attempts"
     )
 
-    error_rows = relationship("IndexAttemptError", back_populates="index_attempt")
+    error_rows = relationship(
+        "IndexAttemptError",
+        back_populates="index_attempt",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index(
@@ -806,7 +818,7 @@ class SearchDoc(Base):
 
     chat_messages = relationship(
         "ChatMessage",
-        secondary="chat_message__search_doc",
+        secondary=ChatMessage__SearchDoc.__table__,
         back_populates="search_docs",
     )
 
@@ -949,7 +961,7 @@ class ChatMessage(Base):
     )
     search_docs: Mapped[list["SearchDoc"]] = relationship(
         "SearchDoc",
-        secondary="chat_message__search_doc",
+        secondary=ChatMessage__SearchDoc.__table__,
         back_populates="chat_messages",
     )
     # NOTE: Should always be attached to the `assistant` message.
@@ -1085,6 +1097,7 @@ class CloudEmbeddingProvider(Base):
     provider_type: Mapped[EmbeddingProvider] = mapped_column(
         Enum(EmbeddingProvider), primary_key=True
     )
+    api_url: Mapped[str | None] = mapped_column(String, nullable=True)
     api_key: Mapped[str | None] = mapped_column(EncryptedString())
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
@@ -1400,7 +1413,7 @@ class TaskQueueState(Base):
     __tablename__ = "task_queue_jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Celery task id
+    # Celery task id. currently only for readability/diagnostics
     task_id: Mapped[str] = mapped_column(String)
     # For any job type, this would be the same
     task_name: Mapped[str] = mapped_column(String)
