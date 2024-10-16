@@ -8,14 +8,7 @@ import {
   FiGlobe,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
-import {
-  Dispatch,
-  SetStateAction,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   DanswerDocument,
@@ -46,12 +39,7 @@ import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Citation } from "@/components/search/results/Citation";
 import { DocumentMetadataBlock } from "@/components/search/DocumentDisplay";
 
-import {
-  ThumbsUpIcon,
-  ThumbsDownIcon,
-  LikeFeedback,
-  DislikeFeedback,
-} from "@/components/icons/icons";
+import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
 import {
   CustomTooltip,
   TooltipGroup,
@@ -64,7 +52,8 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import GeneratingImageDisplay from "../tools/GeneratingImageDisplay";
 import RegenerateOption from "../RegenerateOption";
 import { LlmOverride } from "@/lib/hooks";
-import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
+import { ContinueGenerating } from "./ContinueMessage";
+import { MemoizedLink, MemoizedParagraph } from "./MemoizedTextComponents";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -123,6 +112,7 @@ function FileDisplay({
 export const AIMessage = ({
   regenerate,
   overriddenModel,
+  continueGenerating,
   shared,
   isActive,
   toggleDocumentSelection,
@@ -150,6 +140,7 @@ export const AIMessage = ({
 }: {
   shared?: boolean;
   isActive?: boolean;
+  continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
   selectedDocuments?: DanswerDocument[] | null;
@@ -283,11 +274,12 @@ export const AIMessage = ({
               size="small"
               assistant={alternativeAssistant || currentPersona}
             />
+
             <div className="w-full">
               <div className="max-w-message-max break-words">
                 <div className="w-full ml-4">
                   <div className="max-w-message-max break-words">
-                    {(!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME) && (
+                    {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
                         {query !== undefined &&
                           handleShowRetrieved !== undefined &&
@@ -315,7 +307,8 @@ export const AIMessage = ({
                             </div>
                           )}
                       </>
-                    )}
+                    ) : null}
+
                     {toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
@@ -358,59 +351,19 @@ export const AIMessage = ({
                         <FileDisplay files={files || []} />
 
                         {typeof content === "string" ? (
-                          <div className="overflow-x-visible w-full pr-2">
+                          <div className="overflow-x-visible max-w-content-max">
                             <ReactMarkdown
                               key={messageId}
                               className="prose max-w-full text-base"
                               components={{
-                                a: (props) => {
-                                  const { node, ...rest } = props;
-                                  const value = rest.children;
-
-                                  if (value?.toString().startsWith("*")) {
-                                    return (
-                                      <div className="flex-none bg-background-800 inline-block rounded-full h-3 w-3 ml-2" />
-                                    );
-                                  } else if (
-                                    value?.toString().startsWith("[")
-                                  ) {
-                                    // for some reason <a> tags cause the onClick to not apply
-                                    // and the links are unclickable
-                                    // TODO: fix the fact that you have to double click to follow link
-                                    // for the first link
-                                    return (
-                                      <Citation
-                                        link={rest?.href}
-                                        key={node?.position?.start?.offset}
-                                      >
-                                        {rest.children}
-                                      </Citation>
-                                    );
-                                  } else {
-                                    return (
-                                      <a
-                                        key={node?.position?.start?.offset}
-                                        onMouseDown={() =>
-                                          rest.href
-                                            ? window.open(rest.href, "_blank")
-                                            : undefined
-                                        }
-                                        className="cursor-pointer text-link hover:text-link-hover"
-                                      >
-                                        {rest.children}
-                                      </a>
-                                    );
-                                  }
-                                },
+                                a: MemoizedLink,
+                                p: MemoizedParagraph,
                                 code: (props) => (
                                   <CodeBlock
                                     className="w-full"
                                     {...props}
                                     content={content as string}
                                   />
-                                ),
-                                p: ({ node, ...props }) => (
-                                  <p {...props} className="text-default" />
                                 ),
                               }}
                               remarkPlugins={[remarkGfm]}
@@ -566,8 +519,8 @@ export const AIMessage = ({
                       <div
                         ref={hoverElementRef}
                         className={`
-
                         absolute -bottom-5
+                        z-10
                         invisible ${(isHovering || isRegenerateHovered || settings?.isMobile) && "!visible"}
                         opacity-0 ${(isHovering || isRegenerateHovered || settings?.isMobile) && "!opacity-100"}
                         translate-y-2 ${(isHovering || settings?.isMobile) && "!translate-y-0"}
@@ -633,6 +586,11 @@ export const AIMessage = ({
             </div>
           </div>
         </div>
+        {(!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME) &&
+          !query &&
+          continueGenerating && (
+            <ContinueGenerating handleContinueGenerating={continueGenerating} />
+          )}
       </div>
     </div>
   );
@@ -706,6 +664,7 @@ export const HumanMessage = ({
       // Move the cursor to the end of the text
       textareaRef.current.selectionStart = textareaRef.current.value.length;
       textareaRef.current.selectionEnd = textareaRef.current.value.length;
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [isEditing]);
 
@@ -727,10 +686,13 @@ export const HumanMessage = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`mx-auto ${shared ? "w-full" : "w-[90%]"} max-w-[790px]`}>
+      <div
+        className={`text-user-text mx-auto ${shared ? "w-full" : "w-[90%]"} max-w-[790px]`}
+      >
         <div className="xl:ml-8">
           <div className="flex flex-col mr-4">
             <FileDisplay alignBubble files={files || []} />
+
             <div className="flex justify-end">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
                 {isEditing ? (
@@ -744,7 +706,7 @@ export const HumanMessage = ({
                       border 
                       border-border 
                       rounded-lg 
-                      bg-background-emphasis 
+                      bg-background-emphasis
                       pb-2
                       [&:has(textarea:focus)]::ring-1
                       [&:has(textarea:focus)]::ring-black
@@ -777,6 +739,7 @@ export const HumanMessage = ({
                         style={{ scrollbarWidth: "thin" }}
                         onChange={(e) => {
                           setEditedContent(e.target.value);
+                          textareaRef.current!.style.height = "auto";
                           e.target.style.height = `${e.target.scrollHeight}px`;
                         }}
                         onKeyDown={(e) => {
@@ -871,7 +834,7 @@ export const HumanMessage = ({
                           !isEditing &&
                           (!files || files.length === 0)
                         ) && "ml-auto"
-                      } relative   flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-3xl bg-user px-5 py-2.5`}
+                      } relative flex-none max-w-[70%] mb-auto whitespace-break-spaces rounded-3xl bg-user px-5 py-2.5`}
                     >
                       {content}
                     </div>

@@ -3,7 +3,6 @@ from datetime import datetime
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import func
@@ -87,29 +86,57 @@ def get_chat_sessions_by_slack_thread_id(
     return db_session.scalars(stmt).all()
 
 
-def get_first_messages_for_chat_sessions(
-    chat_session_ids: list[int], db_session: Session
+def get_valid_messages_from_query_sessions(
+    chat_session_ids: list[int],
+    db_session: Session,
 ) -> dict[int, str]:
-    subquery = (
-        select(ChatMessage.chat_session_id, func.min(ChatMessage.id).label("min_id"))
+    user_message_subquery = (
+        select(
+            ChatMessage.chat_session_id, func.min(ChatMessage.id).label("user_msg_id")
+        )
         .where(
-            and_(
-                ChatMessage.chat_session_id.in_(chat_session_ids),
-                ChatMessage.message_type == MessageType.USER,  # Select USER messages
-            )
+            ChatMessage.chat_session_id.in_(chat_session_ids),
+            ChatMessage.message_type == MessageType.USER,
         )
         .group_by(ChatMessage.chat_session_id)
         .subquery()
     )
 
-    query = select(ChatMessage.chat_session_id, ChatMessage.message).join(
-        subquery,
-        (ChatMessage.chat_session_id == subquery.c.chat_session_id)
-        & (ChatMessage.id == subquery.c.min_id),
+    assistant_message_subquery = (
+        select(
+            ChatMessage.chat_session_id,
+            func.min(ChatMessage.id).label("assistant_msg_id"),
+        )
+        .where(
+            ChatMessage.chat_session_id.in_(chat_session_ids),
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+        .group_by(ChatMessage.chat_session_id)
+        .subquery()
+    )
+
+    query = (
+        select(ChatMessage.chat_session_id, ChatMessage.message)
+        .join(
+            user_message_subquery,
+            ChatMessage.chat_session_id == user_message_subquery.c.chat_session_id,
+        )
+        .join(
+            assistant_message_subquery,
+            ChatMessage.chat_session_id == assistant_message_subquery.c.chat_session_id,
+        )
+        .join(
+            ChatMessage__SearchDoc,
+            ChatMessage__SearchDoc.chat_message_id
+            == assistant_message_subquery.c.assistant_msg_id,
+        )
+        .where(ChatMessage.id == user_message_subquery.c.user_msg_id)
     )
 
     first_messages = db_session.execute(query).all()
-    return dict([(row.chat_session_id, row.message) for row in first_messages])
+    logger.info(f"Retrieved {len(first_messages)} first messages with documents")
+
+    return {row.chat_session_id: row.message for row in first_messages}
 
 
 def get_chat_sessions_by_user(
@@ -199,7 +226,7 @@ def create_chat_session(
     db_session: Session,
     description: str,
     user_id: UUID | None,
-    persona_id: int,
+    persona_id: int | None,  # Can be none if temporary persona is used
     llm_override: LLMOverride | None = None,
     prompt_override: PromptOverride | None = None,
     one_shot: bool = False,
@@ -253,6 +280,13 @@ def delete_chat_session(
     db_session: Session,
     hard_delete: bool = HARD_DELETE_CHATS,
 ) -> None:
+    chat_session = get_chat_session_by_id(
+        chat_session_id=chat_session_id, user_id=user_id, db_session=db_session
+    )
+
+    if chat_session.deleted:
+        raise ValueError("Cannot delete an already deleted chat session")
+
     if hard_delete:
         delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat_session_id))
@@ -564,6 +598,7 @@ def get_doc_query_identifiers_from_model(
     chat_session: ChatSession,
     user_id: UUID | None,
     db_session: Session,
+    enforce_chat_session_id_for_search_docs: bool,
 ) -> list[tuple[str, int]]:
     """Given a list of search_doc_ids"""
     search_docs = (
@@ -583,7 +618,8 @@ def get_doc_query_identifiers_from_model(
                 for doc in search_docs
             ]
         ):
-            raise ValueError("Invalid reference doc, not from this chat session.")
+            if enforce_chat_session_id_for_search_docs:
+                raise ValueError("Invalid reference doc, not from this chat session.")
     except IndexError:
         # This happens when the doc has no chat_messages associated with it.
         # which happens as an edge case where the chat message failed to save

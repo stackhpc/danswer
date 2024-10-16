@@ -2,6 +2,7 @@ import {
   DanswerDocument,
   Filters,
   SearchDanswerDocument,
+  StreamStopReason,
 } from "@/lib/search/interfaces";
 
 export enum RetrievalType {
@@ -14,6 +15,9 @@ export enum ChatSessionSharedStatus {
   Private = "private",
   Public = "public",
 }
+
+// The number of messages to buffer on the client side.
+export const BUFFER_COUNT = 35;
 
 export interface RetrievalDetails {
   run_search: "always" | "never" | "auto";
@@ -89,6 +93,7 @@ export interface Message {
   alternateAssistantID?: number | null;
   stackTrace?: string | null;
   overridden_model?: string;
+  stopReason?: StreamStopReason | null;
 }
 
 export interface BackendChatSession {

@@ -1,3 +1,5 @@
+from sqlalchemy import and_
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,10 +15,12 @@ from danswer.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.llm import fetch_embedding_provider
 from danswer.db.models import CloudEmbeddingProvider
+from danswer.db.models import IndexAttempt
 from danswer.db.models import IndexModelStatus
 from danswer.db.models import SearchSettings
 from danswer.indexing.models import IndexingSetting
 from danswer.natural_language_processing.search_nlp_models import clean_model_name
+from danswer.natural_language_processing.search_nlp_models import warm_up_cross_encoder
 from danswer.search.models import SavedSearchSettings
 from danswer.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
@@ -89,6 +93,30 @@ def get_current_db_embedding_provider(
     return current_embedding_provider
 
 
+def delete_search_settings(db_session: Session, search_settings_id: int) -> None:
+    current_settings = get_current_search_settings(db_session)
+
+    if current_settings.id == search_settings_id:
+        raise ValueError("Cannot delete currently active search settings")
+
+    # First, delete associated index attempts
+    index_attempts_query = delete(IndexAttempt).where(
+        IndexAttempt.search_settings_id == search_settings_id
+    )
+    db_session.execute(index_attempts_query)
+
+    # Then, delete the search settings
+    search_settings_query = delete(SearchSettings).where(
+        and_(
+            SearchSettings.id == search_settings_id,
+            SearchSettings.status != IndexModelStatus.PRESENT,
+        )
+    )
+
+    db_session.execute(search_settings_query)
+    db_session.commit()
+
+
 def get_current_search_settings(db_session: Session) -> SearchSettings:
     query = (
         select(SearchSettings)
@@ -113,6 +141,13 @@ def get_secondary_search_settings(db_session: Session) -> SearchSettings | None:
     latest_settings = result.scalars().first()
 
     return latest_settings
+
+
+def get_all_search_settings(db_session: Session) -> list[SearchSettings]:
+    query = select(SearchSettings).order_by(SearchSettings.id.desc())
+    result = db_session.execute(query)
+    all_settings = result.scalars().all()
+    return list(all_settings)
 
 
 def get_multilingual_expansion(db_session: Session | None = None) -> list[str]:
@@ -145,6 +180,14 @@ def update_current_search_settings(
     if not current_settings:
         logger.warning("No current search settings found to update")
         return
+
+    # Whenever we update the current search settings, we should ensure that the local reranking model is warmed up.
+    if (
+        search_settings.rerank_provider_type is None
+        and search_settings.rerank_model_name is not None
+        and current_settings.rerank_model_name != search_settings.rerank_model_name
+    ):
+        warm_up_cross_encoder(search_settings.rerank_model_name)
 
     update_search_settings(current_settings, search_settings, preserved_fields)
     db_session.commit()
@@ -234,6 +277,7 @@ def get_old_default_embedding_model() -> IndexingSetting:
         passage_prefix=(ASYM_PASSAGE_PREFIX if is_overridden else ""),
         index_name="danswer_chunk",
         multipass_indexing=False,
+        api_url=None,
     )
 
 
@@ -246,4 +290,5 @@ def get_new_default_embedding_model() -> IndexingSetting:
         passage_prefix=ASYM_PASSAGE_PREFIX,
         index_name=f"danswer_chunk_{clean_model_name(DOCUMENT_ENCODER_MODEL)}",
         multipass_indexing=False,
+        api_url=None,
     )

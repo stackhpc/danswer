@@ -1,7 +1,10 @@
 import React from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
-import { structureValue } from "@/lib/llm/utils";
-import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { checkLLMSupportsImageInput, structureValue } from "@/lib/llm/utils";
+import {
+  getProviderIcon,
+  LLMProviderDescriptor,
+} from "@/app/admin/configuration/llm/interfaces";
 
 interface LlmListProps {
   llmProviders: LLMProviderDescriptor[];
@@ -9,6 +12,8 @@ interface LlmListProps {
   onSelect: (value: string | null) => void;
   userDefault?: string | null;
   scrollable?: boolean;
+  hideProviderIcon?: boolean;
+  requiresImageGeneration?: boolean;
 }
 
 export const LlmList: React.FC<LlmListProps> = ({
@@ -17,9 +22,14 @@ export const LlmList: React.FC<LlmListProps> = ({
   onSelect,
   userDefault,
   scrollable,
+  requiresImageGeneration,
 }) => {
   const llmOptionsByProvider: {
-    [provider: string]: { name: string; value: string }[];
+    [provider: string]: {
+      name: string;
+      value: string;
+      icon: React.FC<{ size?: number; className?: string }>;
+    }[];
   } = {};
   const uniqueModelNames = new Set<string>();
 
@@ -39,6 +49,7 @@ export const LlmList: React.FC<LlmListProps> = ({
               llmProvider.provider,
               modelName
             ),
+            icon: getProviderIcon(llmProvider.provider),
           });
         }
       }
@@ -55,6 +66,7 @@ export const LlmList: React.FC<LlmListProps> = ({
     >
       {userDefault && (
         <button
+          type="button"
           key={-1}
           className={`w-full py-1.5 px-2 text-sm ${
             currentLlm == null
@@ -66,19 +78,26 @@ export const LlmList: React.FC<LlmListProps> = ({
           User Default (currently {getDisplayNameForModel(userDefault)})
         </button>
       )}
-      {llmOptions.map(({ name, value }, index) => (
-        <button
-          key={index}
-          className={`w-full py-1.5 px-2 text-sm ${
-            currentLlm == name
-              ? "bg-background-200"
-              : "bg-background hover:bg-background-100"
-          } text-left rounded`}
-          onClick={() => onSelect(value)}
-        >
-          {getDisplayNameForModel(name)}
-        </button>
-      ))}
+
+      {llmOptions.map(({ name, icon, value }, index) => {
+        if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
+          return (
+            <button
+              type="button"
+              key={index}
+              className={`w-full py-1.5 flex  gap-x-2 px-2 text-sm ${
+                currentLlm == name
+                  ? "bg-background-200"
+                  : "bg-background hover:bg-background-100"
+              } text-left rounded`}
+              onClick={() => onSelect(value)}
+            >
+              {icon({ size: 16 })}
+              {getDisplayNameForModel(name)}
+            </button>
+          );
+        }
+      })}
     </div>
   );
 };

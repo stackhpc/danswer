@@ -7,7 +7,6 @@ from datetime import timezone
 from functools import lru_cache
 from typing import Any
 from typing import cast
-from urllib.parse import urlparse
 
 import bs4
 from atlassian import Confluence  # type:ignore
@@ -23,6 +22,10 @@ from danswer.configs.app_configs import CONFLUENCE_CONNECTOR_SKIP_LABEL_INDEXING
 from danswer.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
+from danswer.connectors.confluence.confluence_utils import (
+    build_confluence_document_id,
+)
+from danswer.connectors.confluence.confluence_utils import get_used_attachments
 from danswer.connectors.confluence.rate_limit_handler import (
     make_confluence_call_handle_rate_limit,
 )
@@ -51,79 +54,6 @@ NO_PERMISSIONS_TO_VIEW_ATTACHMENTS_ERROR_STR = (
 NO_PARENT_OR_NO_PERMISSIONS_ERROR_STR = (
     "No parent or not permitted to view content with id"
 )
-
-
-def _extract_confluence_keys_from_cloud_url(wiki_url: str) -> tuple[str, str, str]:
-    """Sample
-    URL w/ page: https://danswer.atlassian.net/wiki/spaces/1234abcd/pages/5678efgh/overview
-    URL w/o page: https://danswer.atlassian.net/wiki/spaces/ASAM/overview
-
-    wiki_base is https://danswer.atlassian.net/wiki
-    space is 1234abcd
-    page_id is 5678efgh
-    """
-    parsed_url = urlparse(wiki_url)
-    wiki_base = (
-        parsed_url.scheme
-        + "://"
-        + parsed_url.netloc
-        + parsed_url.path.split("/spaces")[0]
-    )
-
-    path_parts = parsed_url.path.split("/")
-    space = path_parts[3]
-
-    page_id = path_parts[5] if len(path_parts) > 5 else ""
-    return wiki_base, space, page_id
-
-
-def _extract_confluence_keys_from_datacenter_url(wiki_url: str) -> tuple[str, str, str]:
-    """Sample
-    URL w/ page https://danswer.ai/confluence/display/1234abcd/pages/5678efgh/overview
-    URL w/o page https://danswer.ai/confluence/display/1234abcd/overview
-    wiki_base is https://danswer.ai/confluence
-    space is 1234abcd
-    page_id is 5678efgh
-    """
-    # /display/ is always right before the space and at the end of the base print()
-    DISPLAY = "/display/"
-    PAGE = "/pages/"
-
-    parsed_url = urlparse(wiki_url)
-    wiki_base = (
-        parsed_url.scheme
-        + "://"
-        + parsed_url.netloc
-        + parsed_url.path.split(DISPLAY)[0]
-    )
-    space = DISPLAY.join(parsed_url.path.split(DISPLAY)[1:]).split("/")[0]
-    page_id = ""
-    if (content := parsed_url.path.split(PAGE)) and len(content) > 1:
-        page_id = content[1]
-    return wiki_base, space, page_id
-
-
-def extract_confluence_keys_from_url(wiki_url: str) -> tuple[str, str, str, bool]:
-    is_confluence_cloud = (
-        ".atlassian.net/wiki/spaces/" in wiki_url
-        or ".jira.com/wiki/spaces/" in wiki_url
-    )
-
-    try:
-        if is_confluence_cloud:
-            wiki_base, space, page_id = _extract_confluence_keys_from_cloud_url(
-                wiki_url
-            )
-        else:
-            wiki_base, space, page_id = _extract_confluence_keys_from_datacenter_url(
-                wiki_url
-            )
-    except Exception as e:
-        error_msg = f"Not a valid Confluence Wiki Link, unable to extract wiki base, space, and page id. Exception: {e}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-
-    return wiki_base, space, page_id, is_confluence_cloud
 
 
 @lru_cache()
@@ -177,24 +107,6 @@ def parse_html_page(text: str, confluence_client: Confluence) -> str:
         # Include @ sign for tagging, more clear for LLM
         user.replaceWith("@" + _get_user(user_id, confluence_client))
     return format_document_soup(soup)
-
-
-def get_used_attachments(text: str, confluence_client: Confluence) -> list[str]:
-    """Parse a Confluence html page to generate a list of current
-        attachment in used
-
-    Args:
-        text (str): The page content
-        confluence_client (Confluence): Confluence client
-
-    Returns:
-        list[str]: List of filename currently in used
-    """
-    files_in_used = []
-    soup = bs4.BeautifulSoup(text, "html.parser")
-    for attachment in soup.findAll("ri:attachment"):
-        files_in_used.append(attachment.attrs["ri:filename"])
-    return files_in_used
 
 
 def _comment_dfs(
@@ -372,7 +284,10 @@ class RecursiveIndexer:
 class ConfluenceConnector(LoadConnector, PollConnector):
     def __init__(
         self,
-        wiki_page_url: str,
+        wiki_base: str,
+        space: str,
+        is_cloud: bool,
+        page_id: str = "",
         index_recursively: bool = True,
         batch_size: int = INDEX_BATCH_SIZE,
         continue_on_failure: bool = CONTINUE_ON_CONNECTOR_FAILURE,
@@ -386,15 +301,15 @@ class ConfluenceConnector(LoadConnector, PollConnector):
         self.labels_to_skip = set(labels_to_skip)
         self.recursive_indexer: RecursiveIndexer | None = None
         self.index_recursively = index_recursively
-        (
-            self.wiki_base,
-            self.space,
-            self.page_id,
-            self.is_cloud,
-        ) = extract_confluence_keys_from_url(wiki_page_url)
+
+        # Remove trailing slash from wiki_base if present
+        self.wiki_base = wiki_base.rstrip("/")
+        self.space = space
+        self.page_id = page_id
+
+        self.is_cloud = is_cloud
 
         self.space_level_scan = False
-
         self.confluence_client: Confluence | None = None
 
         if self.page_id is None or self.page_id == "":
@@ -414,7 +329,6 @@ class ConfluenceConnector(LoadConnector, PollConnector):
             username=username if self.is_cloud else None,
             password=access_token if self.is_cloud else None,
             token=access_token if not self.is_cloud else None,
-            cloud=self.is_cloud,
         )
         return None
 
@@ -696,13 +610,16 @@ class ConfluenceConnector(LoadConnector, PollConnector):
             page_html = (
                 page["body"].get("storage", page["body"].get("view", {})).get("value")
             )
-            page_url = self.wiki_base + page["_links"]["webui"]
+            # The url and the id are the same
+            page_url = build_confluence_document_id(
+                self.wiki_base, page["_links"]["webui"]
+            )
             if not page_html:
                 logger.debug("Page is empty, skipping: %s", page_url)
                 continue
             page_text = parse_html_page(page_html, self.confluence_client)
 
-            files_in_used = get_used_attachments(page_html, self.confluence_client)
+            files_in_used = get_used_attachments(page_html)
             attachment_text, unused_page_attachments = self._fetch_attachments(
                 self.confluence_client, page_id, files_in_used
             )
@@ -755,8 +672,9 @@ class ConfluenceConnector(LoadConnector, PollConnector):
             if time_filter and not time_filter(last_updated):
                 continue
 
-            attachment_url = self._attachment_to_download_link(
-                self.confluence_client, attachment
+            # The url and the id are the same
+            attachment_url = build_confluence_document_id(
+                self.wiki_base, attachment["_links"]["download"]
             )
             attachment_content = self._attachment_to_content(
                 self.confluence_client, attachment
@@ -866,7 +784,13 @@ class ConfluenceConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    connector = ConfluenceConnector(os.environ["CONFLUENCE_TEST_SPACE_URL"])
+    connector = ConfluenceConnector(
+        wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
+        space=os.environ["CONFLUENCE_TEST_SPACE"],
+        is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
+        page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
+        index_recursively=True,
+    )
     connector.load_credentials(
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],

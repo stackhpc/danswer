@@ -15,13 +15,12 @@ from danswer.db.models import AllowedAnswerFilters
 from danswer.db.models import ChannelConfig
 from danswer.db.models import SlackBotConfig as SlackBotConfigModel
 from danswer.db.models import SlackBotResponseType
-from danswer.db.models import StandardAnswer as StandardAnswerModel
-from danswer.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
 from danswer.db.models import User
 from danswer.search.models import SavedSearchSettings
 from danswer.server.features.persona.models import PersonaSnapshot
 from danswer.server.models import FullUserSnapshot
 from danswer.server.models import InvitedUserSnapshot
+from ee.danswer.server.manage.models import StandardAnswerCategory
 
 
 if TYPE_CHECKING:
@@ -41,6 +40,9 @@ class AuthTypeResponse(BaseModel):
 
 class UserPreferences(BaseModel):
     chosen_assistants: list[int] | None = None
+    hidden_assistants: list[int] = []
+    visible_assistants: list[int] = []
+
     default_model: str | None = None
 
 
@@ -74,6 +76,8 @@ class UserInfo(BaseModel):
                 UserPreferences(
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
+                    hidden_assistants=user.hidden_assistants,
+                    visible_assistants=user.visible_assistants,
                 )
             ),
             # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
@@ -117,58 +121,6 @@ class HiddenUpdateRequest(BaseModel):
     hidden: bool
 
 
-class StandardAnswerCategoryCreationRequest(BaseModel):
-    name: str
-
-
-class StandardAnswerCategory(BaseModel):
-    id: int
-    name: str
-
-    @classmethod
-    def from_model(
-        cls, standard_answer_category: StandardAnswerCategoryModel
-    ) -> "StandardAnswerCategory":
-        return cls(
-            id=standard_answer_category.id,
-            name=standard_answer_category.name,
-        )
-
-
-class StandardAnswer(BaseModel):
-    id: int
-    keyword: str
-    answer: str
-    categories: list[StandardAnswerCategory]
-
-    @classmethod
-    def from_model(cls, standard_answer_model: StandardAnswerModel) -> "StandardAnswer":
-        return cls(
-            id=standard_answer_model.id,
-            keyword=standard_answer_model.keyword,
-            answer=standard_answer_model.answer,
-            categories=[
-                StandardAnswerCategory.from_model(standard_answer_category_model)
-                for standard_answer_category_model in standard_answer_model.categories
-            ],
-        )
-
-
-class StandardAnswerCreationRequest(BaseModel):
-    keyword: str
-    answer: str
-    categories: list[int]
-
-    @field_validator("categories", mode="before")
-    @classmethod
-    def validate_categories(cls, value: list[int]) -> list[int]:
-        if len(value) < 1:
-            raise ValueError(
-                "At least one category must be attached to a standard answer"
-            )
-        return value
-
-
 class SlackBotTokens(BaseModel):
     bot_token: str
     app_token: str
@@ -194,6 +146,7 @@ class SlackBotConfigCreationRequest(BaseModel):
     # list of user emails
     follow_up_tags: list[str] | None = None
     response_type: SlackBotResponseType
+    # XXX this is going away soon
     standard_answer_categories: list[int] = Field(default_factory=list)
 
     @field_validator("answer_filters", mode="before")
@@ -218,6 +171,7 @@ class SlackBotConfig(BaseModel):
     persona: PersonaSnapshot | None
     channel_config: ChannelConfig
     response_type: SlackBotResponseType
+    # XXX this is going away soon
     standard_answer_categories: list[StandardAnswerCategory]
     enable_auto_filters: bool
 
@@ -236,6 +190,7 @@ class SlackBotConfig(BaseModel):
             ),
             channel_config=slack_bot_config_model.channel_config,
             response_type=slack_bot_config_model.response_type,
+            # XXX this is going away soon
             standard_answer_categories=[
                 StandardAnswerCategory.from_model(standard_answer_category_model)
                 for standard_answer_category_model in slack_bot_config_model.standard_answer_categories

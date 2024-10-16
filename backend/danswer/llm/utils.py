@@ -32,7 +32,6 @@ from litellm.exceptions import UnprocessableEntityError  # type: ignore
 from danswer.configs.constants import MessageType
 from danswer.configs.model_configs import GEN_AI_MAX_TOKENS
 from danswer.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from danswer.configs.model_configs import GEN_AI_MODEL_PROVIDER
 from danswer.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from danswer.db.models import ChatMessage
 from danswer.file_store.models import ChatFileType
@@ -48,7 +47,9 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-def litellm_exception_to_error_msg(e: Exception, llm: LLM) -> str:
+def litellm_exception_to_error_msg(
+    e: Exception, llm: LLM, fallback_to_error_msg: bool = False
+) -> str:
     error_msg = str(e)
 
     if isinstance(e, BadRequestError):
@@ -95,7 +96,7 @@ def litellm_exception_to_error_msg(e: Exception, llm: LLM) -> str:
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
     elif isinstance(e, APIError):
         error_msg = f"API error: An error occurred while communicating with the API. Details: {str(e)}"
-    else:
+    elif not fallback_to_error_msg:
         error_msg = "An unexpected error occurred while processing your request. Please try again later."
     return error_msg
 
@@ -331,7 +332,7 @@ def test_llm(llm: LLM) -> str | None:
 def get_llm_max_tokens(
     model_map: dict,
     model_name: str,
-    model_provider: str = GEN_AI_MODEL_PROVIDER,
+    model_provider: str,
 ) -> int:
     """Best effort attempt to get the max tokens for the LLM"""
     if GEN_AI_MAX_TOKENS:
@@ -371,7 +372,7 @@ def get_llm_max_tokens(
 def get_llm_max_output_tokens(
     model_map: dict,
     model_name: str,
-    model_provider: str = GEN_AI_MODEL_PROVIDER,
+    model_provider: str,
 ) -> int:
     """Best effort attempt to get the max output tokens for the LLM"""
     try:

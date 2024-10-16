@@ -42,9 +42,12 @@ export default function LogoType({
       {toggleSidebar && page == "chat" ? (
         <button
           onClick={() => toggleSidebar()}
-          className="pt-[2px] ml-4 desktop:invisible mb-auto"
+          className="pt-[2px] flex  gap-x-2 items-center ml-4 desktop:invisible mb-auto"
         >
           <FiSidebar size={20} />
+          {!showArrow && (
+            <Logo className="desktop:hidden -my-2" height={24} width={24} />
+          )}
         </button>
       ) : (
         <div className="mr-1 invisible mb-auto h-6 w-6">
@@ -56,7 +59,7 @@ export default function LogoType({
       >
         <div className="max-w-[175px]">
           {enterpriseSettings && enterpriseSettings.application_name ? (
-            <div>
+            <div className="w-full">
               <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
                 <p className="text-xs text-subtle">Powered by Danswer</p>
