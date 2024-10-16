@@ -18,7 +18,9 @@ jobs:
       matrix:
         platform:
           - linux/amd64
-          - linux/arm64
+          # NOTE(sd109): Arm builds currently failing with error seen here:
+          # https://github.com/stackhpc/danswer/actions/runs/11368042561/job/31622167035#step:7:366
+          # - linux/arm64
 
     steps:
       - name: Prepare
