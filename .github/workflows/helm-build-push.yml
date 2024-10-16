@@ -37,12 +37,12 @@ jobs:
           curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
           https://ghcr.io/v2/stackhpc/danswer/danswer-backend/tags/list
           | jq .tags
-          | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
+          | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/charts/danswer/values.yaml )
           &&
           curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
           https://ghcr.io/v2/stackhpc/danswer/danswer-web-server/tags/list
           | jq .tags
-          | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
+          | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/charts/danswer/values.yaml )
 
       # Check if current chart version exists in releases already
       - name: Check for Helm chart version bump
