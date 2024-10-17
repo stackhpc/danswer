@@ -7,9 +7,11 @@ on:
 
 env:
   REGISTRY_IMAGE: ghcr.io/stackhpc/danswer/danswer-model-server
+  LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
 
 jobs:
   build-and-push:
+    # NOTE(sd109): Can't use Danswer custom runners here
     runs-on: ubuntu-latest
 
     steps:
@@ -35,14 +37,22 @@ jobs:
         push: true
         tags: |
           ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-          ${{ env.REGISTRY_IMAGE }}:latest
+          ${{ env.LATEST_TAG == 'true' && format('{0}:latest', env.REGISTRY_IMAGE) || '' }}
         build-args: |
           DANSWER_VERSION=${{ github.ref_name }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    # trivy has their own rate limiting issues causing this action to flake
+    # we worked around it by hardcoding to different db repos in env
+    # can re-enable when they figure it out
+    # https://github.com/aquasecurity/trivy/discussions/7538
+    # https://github.com/aquasecurity/trivy-action/issues/389
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
+      env:
+        TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
+        TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
       with:
         image-ref: ${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
         severity: 'CRITICAL,HIGH'

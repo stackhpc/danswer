@@ -16,7 +16,9 @@ from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
 from fastapi import status
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import BaseUserManager
+from fastapi_users import exceptions
 from fastapi_users import FastAPIUsers
 from fastapi_users import models
 from fastapi_users import schemas
@@ -33,6 +35,7 @@ from sqlalchemy.orm import Session
 from danswer.auth.invited_users import get_invited_users
 from danswer.auth.schemas import UserCreate
 from danswer.auth.schemas import UserRole
+from danswer.auth.schemas import UserUpdate
 from danswer.configs.app_configs import AUTH_TYPE
 from danswer.configs.app_configs import DISABLE_AUTH
 from danswer.configs.app_configs import EMAIL_FROM
@@ -65,23 +68,6 @@ from danswer.utils.telemetry import RecordType
 from danswer.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
-
-
-def validate_curator_request(groups: list | None, is_public: bool) -> None:
-    if is_public:
-        detail = "Curators cannot create public objects"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=401,
-            detail=detail,
-        )
-    if not groups:
-        detail = "Curators must specify 1+ groups"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=401,
-            detail=detail,
-        )
 
 
 def is_user_admin(user: User | None) -> bool:
@@ -201,16 +187,36 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_create: schemas.UC | UserCreate,
         safe: bool = False,
         request: Optional[Request] = None,
-    ) -> models.UP:
+    ) -> User:
         verify_email_is_invited(user_create.email)
         verify_email_domain(user_create.email)
         # if hasattr(user_create, "role"):
-            # user_count = await get_user_count()
-            # if user_count == 0 or user_create.email in get_default_admin_user_emails():
-            #     user_create.role = UserRole.ADMIN
-            # else:
-            #     user_create.role = UserRole.BASIC
-        return await super().create(user_create, safe=safe, request=request)  # type: ignore
+        #     user_count = await get_user_count()
+        #     if user_count == 0 or user_create.email in get_default_admin_user_emails():
+        #         user_create.role = UserRole.ADMIN
+        #     else:
+        #         user_create.role = UserRole.BASIC
+        user = None
+        try:
+            user = await super().create(user_create, safe=safe, request=request)  # type: ignore
+        except exceptions.UserAlreadyExists:
+            user = await self.get_by_email(user_create.email)
+            # Handle case where user has used product outside of web and is now creating an account through web
+            if (
+                not user.has_web_login
+                and hasattr(user_create, "has_web_login")
+                and user_create.has_web_login
+            ):
+                user_update = UserUpdate(
+                    password=user_create.password,
+                    has_web_login=True,
+                    role=user_create.role,
+                    is_verified=user_create.is_verified,
+                )
+                user = await self.update(user_update, user)
+            else:
+                raise exceptions.UserAlreadyExists()
+        return user
 
     async def oauth_callback(
         self: "BaseUserManager[models.UOAP, models.ID]",
@@ -251,6 +257,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if user.oidc_expiry and not TRACK_EXTERNAL_IDP_EXPIRY:
             await self.user_db.update(user, update_dict={"oidc_expiry": None})
 
+        # Handle case where user has used product outside of web and is now creating an account through web
+        if not user.has_web_login:
+            await self.user_db.update(
+                user,
+                update_dict={
+                    "is_verified": is_verified_by_default,
+                    "has_web_login": True,
+                },
+            )
+            user.is_verified = is_verified_by_default
+            user.has_web_login = True
+
         return user
 
     async def on_after_register(
@@ -278,6 +296,32 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
 
         send_user_verification_email(user.email, token)
+
+    async def authenticate(
+        self, credentials: OAuth2PasswordRequestForm
+    ) -> Optional[User]:
+        try:
+            user = await self.get_by_email(credentials.username)
+        except exceptions.UserNotExists:
+            self.password_helper.hash(credentials.password)
+            return None
+
+        if not user.has_web_login:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
+            )
+
+        verified, updated_password_hash = self.password_helper.verify_and_update(
+            credentials.password, user.hashed_password
+        )
+        if not verified:
+            return None
+
+        if updated_password_hash is not None:
+            await self.user_db.update(user, {"hashed_password": updated_password_hash})
+
+        return user
 
 
 async def get_user_manager(
@@ -381,6 +425,7 @@ async def optional_user(
 async def double_check_user(
     user: User | None,
     optional: bool = DISABLE_AUTH,
+    include_expired: bool = False,
 ) -> User | None:
     if optional:
         return None
@@ -397,13 +442,23 @@ async def double_check_user(
             detail="Access denied. User is not verified.",
         )
 
-    if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
+    if (
+        user.oidc_expiry
+        and user.oidc_expiry < datetime.now(timezone.utc)
+        and not include_expired
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. User's OIDC token has expired.",
         )
 
     return user
+
+
+async def current_user_with_expired_token(
+    user: User | None = Depends(optional_user),
+) -> User | None:
+    return await double_check_user(user, include_expired=True)
 
 
 async def current_user(

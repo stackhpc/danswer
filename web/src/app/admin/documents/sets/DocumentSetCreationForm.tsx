@@ -125,14 +125,12 @@ export const DocumentSetCreationForm = ({
                 placeholder="Describe what the document set represents"
                 autoCompleteDisabled={true}
               />
-              {isPaidEnterpriseFeaturesEnabled &&
-                userGroups &&
-                userGroups.length > 0 && (
-                  <IsPublicGroupSelector
-                    formikProps={props}
-                    objectName="document set"
-                  />
-                )}
+              {isPaidEnterpriseFeaturesEnabled && (
+                <IsPublicGroupSelector
+                  formikProps={props}
+                  objectName="document set"
+                />
+              )}
 
               <Divider />
 
@@ -157,7 +155,7 @@ export const DocumentSetCreationForm = ({
                         // Filter visible cc pairs
                         const visibleCcPairs = localCcPairs.filter(
                           (ccPair) =>
-                            ccPair.public_doc ||
+                            ccPair.access_type === "public" ||
                             (ccPair.groups.length > 0 &&
                               props.values.groups.every((group) =>
                                 ccPair.groups.includes(group)
@@ -230,7 +228,7 @@ export const DocumentSetCreationForm = ({
                         // Filter non-visible cc pairs
                         const nonVisibleCcPairs = localCcPairs.filter(
                           (ccPair) =>
-                            !ccPair.public_doc &&
+                            !(ccPair.access_type === "public") &&
                             (ccPair.groups.length === 0 ||
                               !props.values.groups.every((group) =>
                                 ccPair.groups.includes(group)

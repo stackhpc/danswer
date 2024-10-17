@@ -126,6 +126,7 @@ try:
 except ValueError:
     INDEX_BATCH_SIZE = 16
 
+
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
 POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
@@ -148,6 +149,43 @@ try:
     )
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
+
+REDIS_SSL = os.getenv("REDIS_SSL", "").lower() == "true"
+REDIS_HOST = os.environ.get("REDIS_HOST") or "localhost"
+REDIS_PORT = int(os.environ.get("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
+
+# Used for general redis things
+REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
+
+# Used by celery as broker and backend
+REDIS_DB_NUMBER_CELERY_RESULT_BACKEND = int(
+    os.environ.get("REDIS_DB_NUMBER_CELERY_RESULT_BACKEND", 14)
+)
+REDIS_DB_NUMBER_CELERY = int(os.environ.get("REDIS_DB_NUMBER_CELERY", 15))  # broker
+
+# will propagate to both our redis client as well as celery's redis client
+REDIS_HEALTH_CHECK_INTERVAL = int(os.environ.get("REDIS_HEALTH_CHECK_INTERVAL", 60))
+
+# our redis client only, not celery's
+REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 128))
+
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#redis-backend-settings
+# should be one of "required", "optional", or "none"
+REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
+REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+
+CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
+
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#broker-pool-limit
+# Setting to None may help when there is a proxy in the way closing idle connections
+CELERY_BROKER_POOL_LIMIT_DEFAULT = 10
+try:
+    CELERY_BROKER_POOL_LIMIT = int(
+        os.environ.get("CELERY_BROKER_POOL_LIMIT", CELERY_BROKER_POOL_LIMIT_DEFAULT)
+    )
+except ValueError:
+    CELERY_BROKER_POOL_LIMIT = CELERY_BROKER_POOL_LIMIT_DEFAULT
 
 #####
 # Connector Configs
@@ -225,6 +263,10 @@ JIRA_CONNECTOR_LABELS_TO_SKIP = [
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
     if ignored_tag
 ]
+# Maximum size for Jira tickets in bytes (default: 100KB)
+JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
+    os.environ.get("JIRA_CONNECTOR_MAX_TICKET_SIZE", 100 * 1024)
+)
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
@@ -248,7 +290,7 @@ ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"
 )
 
-# This is the maxiumum rate at which documents are queried for a pruning job. 0 disables the limitation.
+# This is the maximum rate at which documents are queried for a pruning job. 0 disables the limitation.
 MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE = int(
     os.environ.get("MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE", 0)
 )

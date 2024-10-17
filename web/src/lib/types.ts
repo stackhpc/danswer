@@ -5,6 +5,8 @@ import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/
 
 export interface UserPreferences {
   chosen_assistants: number[] | null;
+  visible_assistants: number[];
+  hidden_assistants: number[];
   default_model: string | null;
 }
 
@@ -20,6 +22,13 @@ export enum UserRole {
   CURATOR = "curator",
   GLOBAL_CURATOR = "global_curator",
 }
+
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  [UserRole.BASIC]: "Basic",
+  [UserRole.ADMIN]: "Admin",
+  [UserRole.GLOBAL_CURATOR]: "Global Curator",
+  [UserRole.CURATOR]: "Curator",
+};
 
 export interface User {
   id: string;
@@ -49,6 +58,8 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike";
+export type AccessType = "public" | "private" | "sync";
+export type SessionType = "Chat" | "Search" | "Slack";
 
 export interface DocumentBoostStatus {
   document_id: string;
@@ -56,6 +67,15 @@ export interface DocumentBoostStatus {
   link: string;
   boost: number;
   hidden: boolean;
+}
+
+export interface FailedConnectorIndexingStatus {
+  cc_pair_id: number;
+  name: string | null;
+  error_msg: string | null;
+  is_deletable: boolean;
+  connector_id: number;
+  credential_id: number;
 }
 
 export interface IndexAttemptSnapshot {
@@ -80,7 +100,7 @@ export interface ConnectorIndexingStatus<
   cc_pair_status: ConnectorCredentialPairStatus;
   connector: Connector<ConnectorConfigType>;
   credential: Credential<ConnectorCredentialType>;
-  public_doc: boolean;
+  access_type: AccessType;
   owner: string;
   groups: number[];
   last_finished_status: ValidStatuses | null;
@@ -152,6 +172,8 @@ export interface StandardAnswer {
   id: number;
   keyword: string;
   answer: string;
+  match_regex: boolean;
+  match_any_keywords: boolean;
   categories: StandardAnswerCategory[];
 }
 
@@ -232,11 +254,27 @@ const validSources = [
   "clickup",
   "wikipedia",
   "mediawiki",
+  "asana",
   "s3",
   "r2",
   "google_cloud_storage",
+  "xenforo",
   "oci_storage",
   "not_applicable",
-];
+  "ingestion_api",
+] as const;
 
 export type ValidSources = (typeof validSources)[number];
+// The valid sources that are actually valid to select in the UI
+export type ConfigurableSources = Exclude<
+  ValidSources,
+  "not_applicable" | "ingestion_api"
+>;
+
+// The sources that have auto-sync support on the backend
+export const validAutoSyncSources = [
+  "confluence",
+  "google_drive",
+  "slack",
+] as const;
+export type ValidAutoSyncSources = (typeof validAutoSyncSources)[number];

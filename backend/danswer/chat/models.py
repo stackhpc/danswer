@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -44,8 +45,26 @@ class QADocsResponse(RetrievalDocs):
         return initial_dict
 
 
+class StreamStopReason(Enum):
+    CONTEXT_LENGTH = "context_length"
+    CANCELLED = "cancelled"
+
+
+class StreamStopInfo(BaseModel):
+    stop_reason: StreamStopReason
+
+    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
+        data = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
+        data["stop_reason"] = self.stop_reason.name
+        return data
+
+
 class LLMRelevanceFilterResponse(BaseModel):
-    relevant_chunk_indices: list[int]
+    llm_selected_doc_indices: list[int]
+
+
+class FinalUsedContextDocsResponse(BaseModel):
+    final_context_docs: list[LlmDoc]
 
 
 class RelevanceAnalysis(BaseModel):
@@ -76,6 +95,16 @@ class DanswerAnswerPiece(BaseModel):
 class CitationInfo(BaseModel):
     citation_num: int
     document_id: str
+
+
+class AllCitations(BaseModel):
+    citations: list[CitationInfo]
+
+
+# This is a mapping of the citation number to the document index within
+# the result search doc set
+class MessageSpecificCitations(BaseModel):
+    citation_map: dict[int, int]
 
 
 class MessageResponseIDInfo(BaseModel):
@@ -123,7 +152,7 @@ class QAResponse(SearchResponse, DanswerAnswer):
     predicted_flow: QueryFlow
     predicted_search: SearchType
     eval_res_valid: bool | None = None
-    llm_chunks_indices: list[int] | None = None
+    llm_selected_doc_indices: list[int] | None = None
     error_msg: str | None = None
 
 
@@ -144,6 +173,7 @@ AnswerQuestionPossibleReturn = (
     | ImageGenerationDisplay
     | CustomToolResponse
     | StreamingError
+    | StreamStopInfo
 )
 
 

@@ -10,7 +10,7 @@ import {
   CloudEmbeddingModel,
   EmbeddingProvider,
   HostedEmbeddingModel,
-} from "../../../../components/embedding/interfaces";
+} from "@/components/embedding/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
@@ -18,7 +18,6 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
   AdvancedSearchConfiguration,
-  RerankerProvider,
   RerankingDetails,
   SavedSearchSettings,
 } from "../interfaces";
@@ -41,13 +40,15 @@ export default function EmbeddingForm() {
       multipass_indexing: true,
       multilingual_expansion: [],
       disable_rerank_for_streaming: false,
+      api_url: null,
+      num_rerank: 0,
     });
 
   const [rerankingDetails, setRerankingDetails] = useState<RerankingDetails>({
-    api_key: "",
-    num_rerank: 0,
+    rerank_api_key: "",
     rerank_provider_type: null,
     rerank_model_name: "",
+    rerank_api_url: null,
   });
 
   const updateAdvancedEmbeddingDetails = (
@@ -116,28 +117,31 @@ export default function EmbeddingForm() {
         multilingual_expansion: searchSettings.multilingual_expansion,
         disable_rerank_for_streaming:
           searchSettings.disable_rerank_for_streaming,
-      });
-      setRerankingDetails({
-        api_key: searchSettings.api_key,
         num_rerank: searchSettings.num_rerank,
+        api_url: null,
+      });
+
+      setRerankingDetails({
+        rerank_api_key: searchSettings.rerank_api_key,
         rerank_provider_type: searchSettings.rerank_provider_type,
         rerank_model_name: searchSettings.rerank_model_name,
+        rerank_api_url: searchSettings.rerank_api_url,
       });
     }
   }, [searchSettings]);
 
   const originalRerankingDetails: RerankingDetails = searchSettings
     ? {
-        api_key: searchSettings.api_key,
-        num_rerank: searchSettings.num_rerank,
+        rerank_api_key: searchSettings.rerank_api_key,
         rerank_provider_type: searchSettings.rerank_provider_type,
         rerank_model_name: searchSettings.rerank_model_name,
+        rerank_api_url: searchSettings.rerank_api_url,
       }
     : {
-        api_key: "",
-        num_rerank: 0,
+        rerank_api_key: "",
         rerank_provider_type: null,
         rerank_model_name: "",
+        rerank_api_url: null,
       };
 
   useEffect(() => {
@@ -186,13 +190,14 @@ export default function EmbeddingForm() {
     }
     let newModel: SavedSearchSettings;
 
+    // We use a spread operation to merge properties from multiple objects into a single object.
+    // Advanced embedding details may update default values.
     if (selectedProvider.provider_type != null) {
       // This is a cloud model
       newModel = {
+        ...rerankingDetails,
         ...advancedEmbeddingDetails,
         ...selectedProvider,
-        ...rerankingDetails,
-        model_name: selectedProvider.model_name,
         provider_type:
           (selectedProvider.provider_type
             ?.toLowerCase()
@@ -201,10 +206,10 @@ export default function EmbeddingForm() {
     } else {
       // This is a locally hosted model
       newModel = {
-        ...advancedEmbeddingDetails,
         ...selectedProvider,
         ...rerankingDetails,
-        model_name: selectedProvider.model_name!,
+        ...advancedEmbeddingDetails,
+        ...selectedProvider,
         provider_type: null,
       };
     }
@@ -220,9 +225,10 @@ export default function EmbeddingForm() {
         },
       }
     );
+
     if (response.ok) {
       setPopup({
-        message: "Changed provider suceessfully. Redirecing to embedding page",
+        message: "Changed provider successfully. Redirecting to embedding page",
         type: "success",
       });
       mutate("/api/search-settings/get-secondary-search-settings");
@@ -415,7 +421,6 @@ export default function EmbeddingForm() {
           <>
             <Card>
               <AdvancedEmbeddingFormPage
-                numRerank={rerankingDetails.num_rerank}
                 advancedEmbeddingDetails={advancedEmbeddingDetails}
                 updateAdvancedEmbeddingDetails={updateAdvancedEmbeddingDetails}
               />

@@ -44,7 +44,6 @@ interface FetchChatDataResult {
   toggleSidebar: boolean;
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
-  shouldDisplaySourcesIncompleteModal: boolean;
   userInputPrompts: InputPrompt[];
 }
 
@@ -189,14 +188,6 @@ export async function fetchChatData(searchParams: {
     !hasAnyConnectors &&
     (!user || user.role === "admin");
 
-  const shouldDisplaySourcesIncompleteModal =
-    hasAnyConnectors &&
-    !shouldShowWelcomeModal &&
-    !ccPairs.some(
-      (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
-    ) &&
-    (!user || user.role == "admin");
-
   // if no connectors are setup, only show personas that are pure
   // passthrough and don't do any retrieval
   if (!hasAnyConnectors) {
@@ -242,7 +233,6 @@ export async function fetchChatData(searchParams: {
     finalDocumentSidebarInitialWidth,
     toggleSidebar,
     shouldShowWelcomeModal,
-    shouldDisplaySourcesIncompleteModal,
     userInputPrompts,
   };
 }

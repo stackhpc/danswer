@@ -1,15 +1,13 @@
 import { SubLabel } from "@/components/admin/connectors/Field";
-import { Field } from "formik";
+import { Field, useFormikContext } from "formik";
 
 export default function NumberInput({
   label,
-  value,
   optional,
   description,
   name,
   showNeverIfZero,
 }: {
-  value?: number;
   label: string;
   name: string;
   optional?: boolean;
@@ -28,7 +26,6 @@ export default function NumberInput({
         type="number"
         name={name}
         min="-1"
-        value={value === 0 && showNeverIfZero ? "Never" : value}
         className={`mt-2 block w-full px-3 py-2 
                 bg-white border border-gray-300 rounded-md 
                 text-sm shadow-sm placeholder-gray-400

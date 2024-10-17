@@ -39,6 +39,7 @@ from danswer.configs.constants import DEFAULT_BOOST
 from danswer.configs.constants import DocumentSource
 from danswer.configs.constants import FileOrigin
 from danswer.configs.constants import MessageType
+from danswer.db.enums import AccessType
 from danswer.configs.constants import NotificationType
 from danswer.configs.constants import SearchFeedbackType
 from danswer.configs.constants import TokenRateLimitScope
@@ -61,7 +62,7 @@ from shared_configs.enums import RerankerProvider
 
 
 class Base(DeclarativeBase):
-    pass
+    __abstract__ = True
 
 
 class EncryptedString(TypeDecorator):
@@ -108,7 +109,7 @@ class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
-        "OAuthAccount", lazy="joined"
+        "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
     )
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False, default=UserRole.BASIC)
@@ -122,7 +123,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     # if specified, controls the assistants that are shown to the user + their order
     # if not specified, all assistants are shown
     chosen_assistants: Mapped[list[int]] = mapped_column(
-        postgresql.JSONB(), nullable=True
+        postgresql.JSONB(), nullable=False, default=[-2, -1, 0]
+    )
+    visible_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default=[]
+    )
+    hidden_assistants: Mapped[list[int]] = mapped_column(
+        postgresql.JSONB(), nullable=False, default=[]
     )
 
     oidc_expiry: Mapped[datetime.datetime] = mapped_column(
@@ -157,6 +164,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     notifications: Mapped[list["Notification"]] = relationship(
         "Notification", back_populates="user"
     )
+    # Whether the user has logged in via web. False if user has only used Danswer through Slack bot
+    has_web_login: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class InputPrompt(Base):
@@ -168,7 +177,9 @@ class InputPrompt(Base):
     active: Mapped[bool] = mapped_column(Boolean)
     user: Mapped[User | None] = relationship("User", back_populates="input_prompts")
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
 
 
 class InputPrompt__User(Base):
@@ -212,7 +223,9 @@ class Notification(Base):
     notif_type: Mapped[NotificationType] = mapped_column(
         Enum(NotificationType, native_enum=False)
     )
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     last_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     first_shown: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
@@ -247,7 +260,7 @@ class Persona__User(Base):
 
     persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id"), primary_key=True, nullable=True
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
     )
 
 
@@ -258,7 +271,7 @@ class DocumentSet__User(Base):
         ForeignKey("document_set.id"), primary_key=True
     )
     user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id"), primary_key=True, nullable=True
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
     )
 
 
@@ -373,16 +386,29 @@ class ConnectorCredentialPair(Base):
     connector_id: Mapped[int] = mapped_column(
         ForeignKey("connector.id"), primary_key=True
     )
+
+    deletion_failure_message: Mapped[str | None] = mapped_column(String, nullable=True)
+
     credential_id: Mapped[int] = mapped_column(
         ForeignKey("credential.id"), primary_key=True
     )
     # controls whether the documents indexed by this CC pair are visible to all
     # or if they are only visible to those with that are given explicit access
     # (e.g. via owning the credential or being a part of a group that is given access)
-    is_public: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
+    access_type: Mapped[AccessType] = mapped_column(
+        Enum(AccessType, native_enum=False), nullable=False
+    )
+
+    # special info needed for the auto-sync feature. The exact structure depends on the
+
+    # source type (defined in the connector's `source` field)
+    # E.g. for google_drive perm sync:
+    # {"customer_id": "123567", "company_domain": "@danswer.ai"}
+    auto_sync_options: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    last_time_perm_sync: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     # Time finished, not used for calculating backend jobs which uses time started (created)
     last_successful_index_time: Mapped[datetime.datetime | None] = mapped_column(
@@ -413,6 +439,7 @@ class ConnectorCredentialPair(Base):
 
 class Document(Base):
     __tablename__ = "document"
+    # NOTE: if more sensitive data is added here for display, make sure to add user/group permission
 
     # this should correspond to the ID of the document
     # (as is passed around in Danswer)
@@ -426,11 +453,26 @@ class Document(Base):
     semantic_id: Mapped[str] = mapped_column(String)
     # First Section's link
     link: Mapped[str | None] = mapped_column(String, nullable=True)
+
     # The updated time is also used as a measure of the last successful state of the doc
     # pulled from the source (to help skip reindexing already updated docs in case of
     # connector retries)
+    # TODO: rename this column because it conflates the time of the source doc
+    # with the local last modified time of the doc and any associated metadata
+    # it should just be the server timestamp of the source doc
     doc_updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    # last time any vespa relevant row metadata or the doc changed.
+    # does not include last_synced
+    last_modified: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True, default=func.now()
+    )
+
+    # last successful sync to vespa
+    last_synced: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
     # The following are not attached to User because the account/email may not be known
     # within Danswer
@@ -441,14 +483,25 @@ class Document(Base):
     secondary_owners: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
     )
-    # TODO if more sensitive data is added here for display, make sure to add user/group permission
+    # Permission sync columns
+    # Email addresses are saved at the document level for externally synced permissions
+    # This is becuase the normal flow of assigning permissions is through the cc_pair
+    # doesn't apply here
+    external_user_emails: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    # These group ids have been prefixed by the source type
+    external_user_group_ids: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
     retrieval_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="document"
     )
     tags = relationship(
         "Tag",
-        secondary="document__tag",
+        secondary=Document__Tag.__table__,
         back_populates="documents",
     )
 
@@ -465,7 +518,7 @@ class Tag(Base):
 
     documents = relationship(
         "Document",
-        secondary="document__tag",
+        secondary=Document__Tag.__table__,
         back_populates="tags",
     )
 
@@ -521,7 +574,9 @@ class Credential(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     credential_json: Mapped[dict[str, Any]] = mapped_column(EncryptedJson())
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     # if `true`, then all Admins will have access to the credential
     admin_public: Mapped[bool] = mapped_column(Boolean, default=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -576,6 +631,8 @@ class SearchSettings(Base):
         Enum(RerankerProvider, native_enum=False), nullable=True
     )
     rerank_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    rerank_api_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
     num_rerank: Mapped[int] = mapped_column(Integer, default=NUM_POSTPROCESSED_RESULTS)
 
     cloud_provider: Mapped["CloudEmbeddingProvider"] = relationship(
@@ -606,6 +663,10 @@ class SearchSettings(Base):
     def __repr__(self) -> str:
         return f"<EmbeddingModel(model_name='{self.model_name}', status='{self.status}',\
           cloud_provider='{self.cloud_provider.provider_type if self.cloud_provider else 'None'}')>"
+
+    @property
+    def api_url(self) -> str | None:
+        return self.cloud_provider.api_url if self.cloud_provider is not None else None
 
     @property
     def api_key(self) -> str | None:
@@ -671,7 +732,11 @@ class IndexAttempt(Base):
         "SearchSettings", back_populates="index_attempts"
     )
 
-    error_rows = relationship("IndexAttemptError", back_populates="index_attempt")
+    error_rows = relationship(
+        "IndexAttemptError",
+        back_populates="index_attempt",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index(
@@ -806,7 +871,7 @@ class SearchDoc(Base):
 
     chat_messages = relationship(
         "ChatMessage",
-        secondary="chat_message__search_doc",
+        secondary=ChatMessage__SearchDoc.__table__,
         back_populates="search_docs",
     )
 
@@ -835,8 +900,12 @@ class ChatSession(Base):
     __tablename__ = "chat_session"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
-    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"))
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
     description: Mapped[str] = mapped_column(Text)
     # One-shot direct answering, currently the two types of chats are not mixed
     one_shot: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -870,7 +939,6 @@ class ChatSession(Base):
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
-
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -879,7 +947,6 @@ class ChatSession(Base):
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
     user: Mapped[User] = relationship("User", back_populates="chat_sessions")
     folder: Mapped["ChatFolder"] = relationship(
         "ChatFolder", back_populates="chat_sessions"
@@ -949,7 +1016,7 @@ class ChatMessage(Base):
     )
     search_docs: Mapped[list["SearchDoc"]] = relationship(
         "SearchDoc",
-        secondary="chat_message__search_doc",
+        secondary=ChatMessage__SearchDoc.__table__,
         back_populates="chat_messages",
     )
     # NOTE: Should always be attached to the `assistant` message.
@@ -972,7 +1039,9 @@ class ChatFolder(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     # Only null if auth is off
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     display_priority: Mapped[int] = mapped_column(Integer, nullable=True, default=0)
 
@@ -1085,6 +1154,7 @@ class CloudEmbeddingProvider(Base):
     provider_type: Mapped[EmbeddingProvider] = mapped_column(
         Enum(EmbeddingProvider), primary_key=True
     )
+    api_url: Mapped[str | None] = mapped_column(String, nullable=True)
     api_key: Mapped[str | None] = mapped_column(EncryptedString())
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
@@ -1102,7 +1172,9 @@ class DocumentSet(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, unique=True)
     description: Mapped[str] = mapped_column(String)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     # Whether changes to the document set have been propagated
     is_up_to_date: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # If `False`, then the document set is not visible to users who are not explicitly
@@ -1146,7 +1218,9 @@ class Prompt(Base):
     __tablename__ = "prompt"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
     system_prompt: Mapped[str] = mapped_column(Text)
@@ -1181,9 +1255,13 @@ class Tool(Base):
     openapi_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-
+    custom_headers: Mapped[list[dict[str, str]] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     # user who created / owns the tool. Will be None for built-in tools.
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     # Relationship to Persona through the association table
@@ -1207,7 +1285,9 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
     # Number of chunks to pass to the LLM for generation.
@@ -1236,9 +1316,18 @@ class Persona(Base):
     starter_messages: Mapped[list[StarterMessage] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    # Default personas are configured via backend during deployment
+    search_start_date: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Built-in personas are configured via backend during deployment
     # Treated specially (cannot be user edited etc.)
-    default_persona: Mapped[bool] = mapped_column(Boolean, default=False)
+    builtin_persona: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Default personas are personas created by admins and are automatically added
+    # to all users' assistants list.
+    is_default_persona: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     # controls whether the persona is available to be selected by users
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
     # controls the ordering of personas in the UI
@@ -1289,10 +1378,10 @@ class Persona(Base):
     # Default personas loaded via yaml cannot have the same name
     __table_args__ = (
         Index(
-            "_default_persona_name_idx",
+            "_builtin_persona_name_idx",
             "name",
             unique=True,
-            postgresql_where=(default_persona == True),  # noqa: E712
+            postgresql_where=(builtin_persona == True),  # noqa: E712
         ),
     )
 
@@ -1314,53 +1403,6 @@ class ChannelConfig(TypedDict):
     # If None then no follow up
     # If empty list, follow up with no tags
     follow_up_tags: NotRequired[list[str]]
-
-
-class StandardAnswerCategory(Base):
-    __tablename__ = "standard_answer_category"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String, unique=True)
-    standard_answers: Mapped[list["StandardAnswer"]] = relationship(
-        "StandardAnswer",
-        secondary=StandardAnswer__StandardAnswerCategory.__table__,
-        back_populates="categories",
-    )
-    slack_bot_configs: Mapped[list["SlackBotConfig"]] = relationship(
-        "SlackBotConfig",
-        secondary=SlackBotConfig__StandardAnswerCategory.__table__,
-        back_populates="standard_answer_categories",
-    )
-
-
-class StandardAnswer(Base):
-    __tablename__ = "standard_answer"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    keyword: Mapped[str] = mapped_column(String)
-    answer: Mapped[str] = mapped_column(String)
-    active: Mapped[bool] = mapped_column(Boolean)
-
-    __table_args__ = (
-        Index(
-            "unique_keyword_active",
-            keyword,
-            active,
-            unique=True,
-            postgresql_where=(active == True),  # noqa: E712
-        ),
-    )
-
-    categories: Mapped[list[StandardAnswerCategory]] = relationship(
-        "StandardAnswerCategory",
-        secondary=StandardAnswer__StandardAnswerCategory.__table__,
-        back_populates="standard_answers",
-    )
-    chat_messages: Mapped[list[ChatMessage]] = relationship(
-        "ChatMessage",
-        secondary=ChatMessage__StandardAnswer.__table__,
-        back_populates="standard_answers",
-    )
 
 
 class SlackBotResponseType(str, PyEnum):
@@ -1388,7 +1430,7 @@ class SlackBotConfig(Base):
     )
 
     persona: Mapped[Persona | None] = relationship("Persona")
-    standard_answer_categories: Mapped[list[StandardAnswerCategory]] = relationship(
+    standard_answer_categories: Mapped[list["StandardAnswerCategory"]] = relationship(
         "StandardAnswerCategory",
         secondary=SlackBotConfig__StandardAnswerCategory.__table__,
         back_populates="slack_bot_configs",
@@ -1400,7 +1442,7 @@ class TaskQueueState(Base):
     __tablename__ = "task_queue_jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # Celery task id
+    # Celery task id. currently only for readability/diagnostics
     task_id: Mapped[str] = mapped_column(String)
     # For any job type, this would be the same
     task_name: Mapped[str] = mapped_column(String)
@@ -1450,7 +1492,9 @@ class SamlAccount(Base):
     __tablename__ = "saml"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), unique=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), unique=True
+    )
     encrypted_cookie: Mapped[str] = mapped_column(Text, unique=True)
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime.datetime] = mapped_column(
@@ -1469,7 +1513,7 @@ class User__UserGroup(Base):
         ForeignKey("user_group.id"), primary_key=True
     )
     user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id"), primary_key=True, nullable=True
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
     )
 
 
@@ -1618,94 +1662,72 @@ class TokenRateLimit__UserGroup(Base):
     )
 
 
+class StandardAnswerCategory(Base):
+    __tablename__ = "standard_answer_category"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    standard_answers: Mapped[list["StandardAnswer"]] = relationship(
+        "StandardAnswer",
+        secondary=StandardAnswer__StandardAnswerCategory.__table__,
+        back_populates="categories",
+    )
+    slack_bot_configs: Mapped[list["SlackBotConfig"]] = relationship(
+        "SlackBotConfig",
+        secondary=SlackBotConfig__StandardAnswerCategory.__table__,
+        back_populates="standard_answer_categories",
+    )
+
+
+class StandardAnswer(Base):
+    __tablename__ = "standard_answer"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    keyword: Mapped[str] = mapped_column(String)
+    answer: Mapped[str] = mapped_column(String)
+    active: Mapped[bool] = mapped_column(Boolean)
+    match_regex: Mapped[bool] = mapped_column(Boolean)
+    match_any_keywords: Mapped[bool] = mapped_column(Boolean)
+
+    __table_args__ = (
+        Index(
+            "unique_keyword_active",
+            keyword,
+            active,
+            unique=True,
+            postgresql_where=(active == True),  # noqa: E712
+        ),
+    )
+
+    categories: Mapped[list[StandardAnswerCategory]] = relationship(
+        "StandardAnswerCategory",
+        secondary=StandardAnswer__StandardAnswerCategory.__table__,
+        back_populates="standard_answers",
+    )
+    chat_messages: Mapped[list[ChatMessage]] = relationship(
+        "ChatMessage",
+        secondary=ChatMessage__StandardAnswer.__table__,
+        back_populates="standard_answers",
+    )
+
+
 """Tables related to Permission Sync"""
 
 
-class PermissionSyncStatus(str, PyEnum):
-    IN_PROGRESS = "in_progress"
-    SUCCESS = "success"
-    FAILED = "failed"
-
-
-class PermissionSyncJobType(str, PyEnum):
-    USER_LEVEL = "user_level"
-    GROUP_LEVEL = "group_level"
-
-
-class PermissionSyncRun(Base):
-    """Represents one run of a permission sync job. For some given cc_pair, it is either sync-ing
-    the users or it is sync-ing the groups"""
-
-    __tablename__ = "permission_sync_run"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # Not strictly needed but makes it easy to use without fetching from cc_pair
-    source_type: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False)
-    )
-    # Currently all sync jobs are handled as a group permission sync or a user permission sync
-    update_type: Mapped[PermissionSyncJobType] = mapped_column(
-        Enum(PermissionSyncJobType)
-    )
-    cc_pair_id: Mapped[int | None] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), nullable=True
-    )
-    status: Mapped[PermissionSyncStatus] = mapped_column(Enum(PermissionSyncStatus))
-    error_msg: Mapped[str | None] = mapped_column(Text, default=None)
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    cc_pair: Mapped[ConnectorCredentialPair] = relationship("ConnectorCredentialPair")
-
-
-class ExternalPermission(Base):
+class User__ExternalUserGroupId(Base):
     """Maps user info both internal and external to the name of the external group
     This maps the user to all of their external groups so that the external group name can be
     attached to the ACL list matching during query time. User level permissions can be handled by
     directly adding the Danswer user to the doc ACL list"""
 
-    __tablename__ = "external_permission"
+    __tablename__ = "user__external_user_group_id"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
-    # Email is needed because we want to keep track of users not in Danswer to simplify process
-    # when the user joins
-    user_email: Mapped[str] = mapped_column(String)
-    source_type: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), primary_key=True)
+    # These group ids have been prefixed by the source type
+    external_user_group_id: Mapped[str] = mapped_column(String, primary_key=True)
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), primary_key=True
     )
-    external_permission_group: Mapped[str] = mapped_column(String)
-    user = relationship("User")
-
-
-class EmailToExternalUserCache(Base):
-    """A way to map users IDs in the external tool to a user in Danswer or at least an email for
-    when the user joins. Used as a cache for when fetching external groups which have their own
-    user ids, this can easily be mapped back to users already known in Danswer without needing
-    to call external APIs to get the user emails.
-
-    This way when groups are updated in the external tool and we need to update the mapping of
-    internal users to the groups, we can sync the internal users to the external groups they are
-    part of using this.
-
-    Ie. User Chris is part of groups alpha, beta, and we can update this if Chris is no longer
-    part of alpha in some external tool.
-    """
-
-    __tablename__ = "email_to_external_user_cache"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_user_id: Mapped[str] = mapped_column(String)
-    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
-    # Email is needed because we want to keep track of users not in Danswer to simplify process
-    # when the user joins
-    user_email: Mapped[str] = mapped_column(String)
-    source_type: Mapped[DocumentSource] = mapped_column(
-        Enum(DocumentSource, native_enum=False)
-    )
-
-    user = relationship("User")
 
 
 class UsageReport(Base):
@@ -1721,7 +1743,7 @@ class UsageReport(Base):
 
     # if None, report was auto-generated
     requestor_user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id"), nullable=True
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

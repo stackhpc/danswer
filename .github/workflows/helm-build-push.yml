@@ -20,11 +20,11 @@ jobs:
       # on main or a stable tag on a dev branch.
 
       - name: Fail on semver pre-release chart version
-        run: yq .version deployment/helm/Chart.yaml | grep -v '[a-zA-Z-]'
+        run: yq .version deployment/helm/charts/danswer/Chart.yaml | grep -v '[a-zA-Z-]'
         if: ${{ github.ref_name == 'main' }}
 
       - name: Fail on stable semver chart version
-        run: yq .version deployment/helm/Chart.yaml | grep '[a-zA-Z-]'
+        run: yq .version deployment/helm/charts/danswer/Chart.yaml | grep '[a-zA-Z-]'
         if: ${{ github.ref_name != 'main' }}
 
       # To reduce resource usage images are built only on tag.
@@ -37,19 +37,19 @@ jobs:
           curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
           https://ghcr.io/v2/stackhpc/danswer/danswer-backend/tags/list
           | jq .tags
-          | grep $( yq .appVersion deployment/helm/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
+          | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/charts/danswer/values.yaml )
           &&
           curl -H "Authorization: Bearer $(echo ${{ secrets.GITHUB_TOKEN }} | base64)"
           https://ghcr.io/v2/stackhpc/danswer/danswer-web-server/tags/list
           | jq .tags
-          | grep $( yq .appVersion deployment/helm/Chart.yaml )-$( yq .tagSuffix deployment/helm/values.yaml )
+          | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/charts/danswer/values.yaml )
 
       # Check if current chart version exists in releases already
       - name: Check for Helm chart version bump
         id: version_check
         run: |
           set -xe
-          chart_version=$(yq .version deployment/helm/Chart.yaml)
+          chart_version=$(yq .version deployment/helm/charts/danswer/Chart.yaml)
           if [[ $(curl https://api.github.com/repos/stackhpc/danswer/releases | jq '.[].tag_name' | grep danswer-helm-$chart_version) ]]; then
             echo chart_version_changed=false >> $GITHUB_OUTPUT
           else
@@ -84,12 +84,12 @@ jobs:
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add vespa https://unoplat.github.io/vespa-helm-charts
-          helm dependency build deployment/helm
+          helm dependency build deployment/helm/charts/danswer
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
-          charts_dir: deployment
+          charts_dir: deployment/helm/charts
           pages_branch: helm-publish
           mark_as_latest: ${{ github.ref_name == 'main' }}
         env:

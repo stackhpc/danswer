@@ -11,14 +11,14 @@ from danswer.configs.constants import MessageType
 from danswer.db.chat import get_chat_messages_by_session
 from danswer.db.chat import get_chat_session_by_id
 from danswer.db.chat import get_chat_sessions_by_user
-from danswer.db.chat import get_first_messages_for_chat_sessions
 from danswer.db.chat import get_search_docs_for_chat_message
+from danswer.db.chat import get_valid_messages_from_query_sessions
 from danswer.db.chat import translate_db_message_to_chat_message_detail
 from danswer.db.chat import translate_db_search_doc_to_server_search_doc
 from danswer.db.engine import get_session
 from danswer.db.models import User
 from danswer.db.search_settings import get_current_search_settings
-from danswer.db.tag import get_tags_by_value_prefix_for_source_types
+from danswer.db.tag import find_tags
 from danswer.document_index.factory import get_default_document_index
 from danswer.document_index.vespa.index import VespaIndex
 from danswer.one_shot_answer.answer_question import stream_search_answer
@@ -99,12 +99,25 @@ def get_tags(
     if not allow_prefix:
         raise NotImplementedError("Cannot disable prefix match for now")
 
-    db_tags = get_tags_by_value_prefix_for_source_types(
-        tag_key_prefix=match_pattern,
-        tag_value_prefix=match_pattern,
+    key_prefix = match_pattern
+    value_prefix = match_pattern
+    require_both_to_match = False
+
+    # split on = to allow the user to type in "author=bob"
+    EQUAL_PAT = "="
+    if match_pattern and EQUAL_PAT in match_pattern:
+        split_pattern = match_pattern.split(EQUAL_PAT)
+        key_prefix = split_pattern[0]
+        value_prefix = EQUAL_PAT.join(split_pattern[1:])
+        require_both_to_match = True
+
+    db_tags = find_tags(
+        tag_key_prefix=key_prefix,
+        tag_value_prefix=value_prefix,
         sources=sources,
         limit=limit,
         db_session=db_session,
+        require_both_to_match=require_both_to_match,
     )
     server_tags = [
         SourceTag(
@@ -142,18 +155,20 @@ def get_user_search_sessions(
         raise HTTPException(
             status_code=404, detail="Chat session does not exist or has been deleted"
         )
-
+    # Extract IDs from search sessions
     search_session_ids = [chat.id for chat in search_sessions]
-    first_messages = get_first_messages_for_chat_sessions(
+    # Fetch first messages for each session, only including those with documents
+    sessions_with_documents = get_valid_messages_from_query_sessions(
         search_session_ids, db_session
     )
-    first_messages_dict = dict(first_messages)
+    sessions_with_documents_dict = dict(sessions_with_documents)
 
+    # Prepare response with detailed information for each valid search session
     response = ChatSessionsResponse(
         sessions=[
             ChatSessionDetails(
                 id=search.id,
-                name=first_messages_dict.get(search.id, search.description),
+                name=sessions_with_documents_dict[search.id],
                 persona_id=search.persona_id,
                 time_created=search.time_created.isoformat(),
                 shared_status=search.shared_status,
@@ -161,8 +176,11 @@ def get_user_search_sessions(
                 current_alternate_model=search.current_alternate_model,
             )
             for search in search_sessions
+            if search.id
+            in sessions_with_documents_dict  # Only include sessions with documents
         ]
     )
+
     return response
 
 

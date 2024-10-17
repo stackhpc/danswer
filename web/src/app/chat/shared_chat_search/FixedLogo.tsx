@@ -25,7 +25,7 @@ export default function FixedLogo() {
           <div className="flex-none my-auto">
             <Logo height={24} width={24} />
           </div>
-          <div className="">
+          <div className="w-full">
             {enterpriseSettings && enterpriseSettings.application_name ? (
               <div>
                 <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>

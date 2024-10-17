@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from danswer.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from danswer.db.connector_credential_pair import get_connector_credential_pairs
+from danswer.db.enums import AccessType
 from danswer.db.enums import ConnectorCredentialPairStatus
 from danswer.db.models import ConnectorCredentialPair
 from danswer.db.models import Document
@@ -180,7 +181,7 @@ def _check_if_cc_pairs_are_owned_by_groups(
             ids=missing_cc_pair_ids,
         )
         for cc_pair in cc_pairs:
-            if not cc_pair.is_public:
+            if cc_pair.access_type != AccessType.PUBLIC:
                 raise ValueError(
                     f"Connector Credential Pair with ID: '{cc_pair.id}'"
                     " is not owned by the specified groups"
@@ -248,6 +249,10 @@ def update_document_set(
     document_set_update_request: DocumentSetUpdateRequest,
     user: User | None = None,
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
+    """If successful, this sets document_set_row.is_up_to_date = False.
+    That will be processed via Celery in check_for_vespa_sync_task
+    and trigger a long running background sync to Vespa.
+    """
     if not document_set_update_request.cc_pair_ids:
         # It's cc-pairs in actuality but the UI displays this error
         raise ValueError("Cannot create a document set with no Connectors")
@@ -519,42 +524,135 @@ def fetch_documents_for_document_set_paginated(
     return documents, documents[-1].id if documents else None
 
 
+def construct_document_select_by_docset(
+    document_set_id: int,
+    current_only: bool = True,
+) -> Select:
+    """This returns a statement that should be executed using
+    .yield_per() to minimize overhead. The primary consumers of this function
+    are background processing task generators."""
+
+    stmt = (
+        select(Document)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == Document.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .join(
+            DocumentSet__ConnectorCredentialPair,
+            DocumentSet__ConnectorCredentialPair.connector_credential_pair_id
+            == ConnectorCredentialPair.id,
+        )
+        .join(
+            DocumentSetDBModel,
+            DocumentSetDBModel.id
+            == DocumentSet__ConnectorCredentialPair.document_set_id,
+        )
+        .where(DocumentSetDBModel.id == document_set_id)
+        .order_by(Document.id)
+    )
+
+    if current_only:
+        stmt = stmt.where(
+            DocumentSet__ConnectorCredentialPair.is_current == True  # noqa: E712
+        )
+
+    stmt = stmt.distinct()
+    return stmt
+
+
+def fetch_document_sets_for_document(
+    document_id: str,
+    db_session: Session,
+) -> list[str]:
+    """
+    Fetches the document set names for a single document ID.
+
+    :param document_id: The ID of the document to fetch sets for.
+    :param db_session: The SQLAlchemy session to use for the query.
+    :return: A list of document set names, or None if no result is found.
+    """
+    result = fetch_document_sets_for_documents([document_id], db_session)
+    if not result:
+        return []
+
+    return result[0][1]
+
+
 def fetch_document_sets_for_documents(
     document_ids: list[str],
     db_session: Session,
 ) -> Sequence[tuple[str, list[str]]]:
     """Gives back a list of (document_id, list[document_set_names]) tuples"""
+
+    """Building subqueries"""
+    # NOTE: have to build these subqueries first in order to guarantee that we get one
+    # returned row for each specified document_id. Basically, we want to do the filters first,
+    # then the outer joins.
+
+    # don't include CC pairs that are being deleted
+    # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
+    # as we can assume their document sets are no longer relevant
+    valid_cc_pairs_subquery = aliased(
+        ConnectorCredentialPair,
+        select(ConnectorCredentialPair)
+        .where(
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING
+        )  # noqa: E712
+        .subquery(),
+    )
+
+    valid_document_set__cc_pairs_subquery = aliased(
+        DocumentSet__ConnectorCredentialPair,
+        select(DocumentSet__ConnectorCredentialPair)
+        .where(DocumentSet__ConnectorCredentialPair.is_current == True)  # noqa: E712
+        .subquery(),
+    )
+    """End building subqueries"""
+
     stmt = (
-        select(Document.id, func.array_agg(DocumentSetDBModel.name))
-        .join(
-            DocumentSet__ConnectorCredentialPair,
-            DocumentSetDBModel.id
-            == DocumentSet__ConnectorCredentialPair.document_set_id,
+        select(
+            Document.id,
+            func.coalesce(
+                func.array_remove(func.array_agg(DocumentSetDBModel.name), None), []
+            ).label("document_set_names"),
         )
-        .join(
-            ConnectorCredentialPair,
-            ConnectorCredentialPair.id
-            == DocumentSet__ConnectorCredentialPair.connector_credential_pair_id,
-        )
-        .join(
+        # Here we select document sets by relation:
+        # Document -> DocumentByConnectorCredentialPair -> ConnectorCredentialPair ->
+        # DocumentSet__ConnectorCredentialPair -> DocumentSet
+        .outerjoin(
             DocumentByConnectorCredentialPair,
-            and_(
-                DocumentByConnectorCredentialPair.connector_id
-                == ConnectorCredentialPair.connector_id,
-                DocumentByConnectorCredentialPair.credential_id
-                == ConnectorCredentialPair.credential_id,
-            ),
-        )
-        .join(
-            Document,
             Document.id == DocumentByConnectorCredentialPair.id,
         )
+        .outerjoin(
+            valid_cc_pairs_subquery,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == valid_cc_pairs_subquery.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == valid_cc_pairs_subquery.credential_id,
+            ),
+        )
+        .outerjoin(
+            valid_document_set__cc_pairs_subquery,
+            valid_cc_pairs_subquery.id
+            == valid_document_set__cc_pairs_subquery.connector_credential_pair_id,
+        )
+        .outerjoin(
+            DocumentSetDBModel,
+            DocumentSetDBModel.id
+            == valid_document_set__cc_pairs_subquery.document_set_id,
+        )
         .where(Document.id.in_(document_ids))
-        # don't include CC pairs that are being deleted
-        # NOTE: CC pairs can never go from DELETING to any other state -> it's safe to ignore them
-        # as we can assume their document sets are no longer relevant
-        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
-        .where(DocumentSet__ConnectorCredentialPair.is_current == True)  # noqa: E712
         .group_by(Document.id)
     )
     return db_session.execute(stmt).all()  # type: ignore
@@ -607,7 +705,7 @@ def check_document_sets_are_public(
             ConnectorCredentialPair.id.in_(
                 connector_credential_pair_ids  # type:ignore
             ),
-            ConnectorCredentialPair.is_public.is_(False),
+            ConnectorCredentialPair.access_type != AccessType.PUBLIC,
         )
         .limit(1)
         .first()
