@@ -65,7 +65,8 @@ export function _WelcomeModal({ user }: { user: User | null }) {
           enabling intelligent responses to your queries.
         </Text>
 
-        <div className="max-h-[900px] overflow-y-scroll">
+        {/* NOTE(sd109): The upstream CSS here breaks custom model modal on regular sized laptop screens */}
+        <div className="max-h-[50vh] overflow-y-auto">
           <ApiKeyForm
             hidePopup
             onSuccess={() => {
