@@ -45,16 +45,16 @@ jobs:
           | grep $( yq .appVersion deployment/helm/charts/danswer/Chart.yaml )-$( yq .tagSuffix deployment/helm/charts/danswer/values.yaml )
 
       # Check if current chart version exists in releases already
-      - name: Check for Helm chart version bump
-        id: version_check
-        run: |
-          set -xe
-          chart_version=$(yq .version deployment/helm/charts/danswer/Chart.yaml)
-          if [[ $(curl https://api.github.com/repos/stackhpc/danswer/releases | jq '.[].tag_name' | grep danswer-helm-$chart_version) ]]; then
-            echo chart_version_changed=false >> $GITHUB_OUTPUT
-          else
-            echo chart_version_changed=true >> $GITHUB_OUTPUT
-          fi
+      # - name: Check for Helm chart version bump
+      #   id: version_check
+      #   run: |
+      #     set -xe
+      #     chart_version=$(yq .version deployment/helm/charts/danswer/Chart.yaml)
+      #     if [[ $(curl https://api.github.com/repos/stackhpc/danswer/releases | jq '.[].tag_name' | grep danswer-helm-$chart_version) ]]; then
+      #       echo chart_version_changed=false >> $GITHUB_OUTPUT
+      #     else
+      #       echo chart_version_changed=true >> $GITHUB_OUTPUT
+      #     fi
 
   release:
     # depending on default permission settings for your org (contents being read-only or read-write for workloads), you will have to add permissions
@@ -62,7 +62,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    needs: helm_chart_version_check
+    # needs: helm_chart_version_check
     if: ${{ needs.helm_chart_version_check.outputs.version_changed == 'true' }}
     steps:
       - name: Checkout
