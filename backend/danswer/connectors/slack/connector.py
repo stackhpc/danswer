@@ -13,13 +13,15 @@ from danswer.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
 from danswer.configs.app_configs import INDEX_BATCH_SIZE
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.interfaces import GenerateDocumentsOutput
-from danswer.connectors.interfaces import IdConnector
+from danswer.connectors.interfaces import GenerateSlimDocumentOutput
 from danswer.connectors.interfaces import PollConnector
 from danswer.connectors.interfaces import SecondsSinceUnixEpoch
+from danswer.connectors.interfaces import SlimConnector
 from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import ConnectorMissingCredentialError
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
+from danswer.connectors.models import SlimDocument
 from danswer.connectors.slack.utils import expert_info_from_slack_id
 from danswer.connectors.slack.utils import get_message_link
 from danswer.connectors.slack.utils import make_paginated_slack_api_call_w_retries
@@ -205,12 +207,17 @@ _DISALLOWED_MSG_SUBTYPES = {
     "group_leave",
     "group_archive",
     "group_unarchive",
+    "channel_leave",
+    "channel_name",
+    "channel_join",
 }
 
 
-def _default_msg_filter(message: MessageType) -> bool:
+def default_msg_filter(message: MessageType) -> bool:
     # Don't keep messages from bots
     if message.get("bot_id") or message.get("app_id"):
+        if message.get("bot_profile", {}).get("name") == "DanswerConnector":
+            return False
         return True
 
     # Uninformative
@@ -261,7 +268,7 @@ def _get_all_docs(
     channel_name_regex_enabled: bool = False,
     oldest: str | None = None,
     latest: str | None = None,
-    msg_filter_func: Callable[[MessageType], bool] = _default_msg_filter,
+    msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> Generator[Document, None, None]:
     """Get all documents in the workspace, channel by channel"""
     slack_cleaner = SlackTextCleaner(client=client)
@@ -320,8 +327,8 @@ def _get_all_doc_ids(
     client: WebClient,
     channels: list[str] | None = None,
     channel_name_regex_enabled: bool = False,
-    msg_filter_func: Callable[[MessageType], bool] = _default_msg_filter,
-) -> set[str]:
+    msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
+) -> GenerateSlimDocumentOutput:
     """
     Get all document ids in the workspace, channel by channel
     This is pretty identical to get_all_docs, but it returns a set of ids instead of documents
@@ -333,13 +340,14 @@ def _get_all_doc_ids(
         all_channels, channels, channel_name_regex_enabled
     )
 
-    all_doc_ids = set()
     for channel in filtered_channels:
+        channel_id = channel["id"]
         channel_message_batches = get_channel_messages(
             client=client,
             channel=channel,
         )
 
+        message_ts_set: set[str] = set()
         for message_batch in channel_message_batches:
             for message in message_batch:
                 if msg_filter_func(message):
@@ -348,12 +356,21 @@ def _get_all_doc_ids(
                 # The document id is the channel id and the ts of the first message in the thread
                 # Since we already have the first message of the thread, we dont have to
                 # fetch the thread for id retrieval, saving time and API calls
-                all_doc_ids.add(f"{channel['id']}__{message['ts']}")
+                message_ts_set.add(message["ts"])
 
-    return all_doc_ids
+        channel_metadata_list: list[SlimDocument] = []
+        for message_ts in message_ts_set:
+            channel_metadata_list.append(
+                SlimDocument(
+                    id=f"{channel_id}__{message_ts}",
+                    perm_sync_data={"channel_id": channel_id},
+                )
+            )
+
+        yield channel_metadata_list
 
 
-class SlackPollConnector(PollConnector, IdConnector):
+class SlackPollConnector(PollConnector, SlimConnector):
     def __init__(
         self,
         workspace: str,
@@ -374,7 +391,11 @@ class SlackPollConnector(PollConnector, IdConnector):
         self.client = WebClient(token=bot_token)
         return None
 
-    def retrieve_all_source_ids(self) -> set[str]:
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateSlimDocumentOutput:
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack")
 
@@ -424,6 +445,7 @@ if __name__ == "__main__":
 
     current = time.time()
     one_day_ago = current - 24 * 60 * 60  # 1 day
+
     document_batches = connector.poll_source(one_day_ago, current)
 
     print(next(document_batches))

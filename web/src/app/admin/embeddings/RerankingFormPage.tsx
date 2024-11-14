@@ -20,7 +20,7 @@ import {
   MixedBreadIcon,
 } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
-import { Button } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
@@ -79,15 +79,21 @@ const RerankingDetailsForm = forwardRef<
       >
         {({ values, setFieldValue, resetForm }) => {
           const resetRerankingValues = () => {
-            setRerankingDetails(originalRerankingDetails);
+            setRerankingDetails({
+              rerank_api_key: null,
+              rerank_provider_type: null,
+              rerank_model_name: null,
+              rerank_api_url: null,
+            });
             resetForm();
           };
 
           return (
             <div className="p-2 rounded-lg max-w-4xl mx-auto">
-              <h2 className="text-2xl font-bold mb-4 text-text-800">
-                Post-processing
-              </h2>
+              <p className="mb-4">
+                Select from cloud, self-hosted models, or use no reranking
+                model.
+              </p>
               <div className="text-sm mr-auto mb-6 divide-x-2 flex">
                 {originalRerankingDetails.rerank_model_name && (
                   <button
@@ -102,7 +108,9 @@ const RerankingDetailsForm = forwardRef<
                   </button>
                 )}
                 <div
-                  className={`${originalRerankingDetails.rerank_model_name && "px-2 ml-2"}`}
+                  className={`${
+                    originalRerankingDetails.rerank_model_name && "px-2 ml-2"
+                  }`}
                 >
                   <button
                     onClick={() => setModelTab("cloud")}
@@ -261,8 +269,7 @@ const RerankingDetailsForm = forwardRef<
                       <div className="flex justify-end">
                         <Button
                           onClick={() => setShowGpuWarningModalModel(null)}
-                          color="blue"
-                          size="xs"
+                          variant="submit"
                         >
                           Understood
                         </Button>
@@ -342,8 +349,7 @@ const RerankingDetailsForm = forwardRef<
                           onClick={() => {
                             setShowLiteLLMConfigurationModal(false);
                           }}
-                          color="blue"
-                          size="xs"
+                          variant="submit"
                         >
                           Update
                         </Button>
@@ -391,8 +397,7 @@ const RerankingDetailsForm = forwardRef<
                       <div className="flex w-full justify-end mt-4">
                         <Button
                           onClick={() => setIsApiKeyModalOpen(false)}
-                          color="blue"
-                          size="xs"
+                          variant="submit"
                         >
                           Update
                         </Button>

@@ -5,23 +5,22 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { LoadingAnimation } from "@/components/Loading";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { ConnectorIndexingStatus } from "@/lib/types";
-import { getCurrentUser } from "@/lib/user";
-import { User, UserRole } from "@/lib/types";
 import {
   Credential,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
-import { GmailOAuthSection, GmailJsonUploadSection } from "./Credential";
-import { usePublicCredentials } from "@/lib/hooks";
-import { Title } from "@tremor/react";
+import { GmailAuthSection, GmailJsonUploadSection } from "./Credential";
+import {
+  usePublicCredentials,
+  useConnectorCredentialIndexingStatus,
+} from "@/lib/hooks";
+import Title from "@/components/ui/title";
 import { GmailConfig } from "@/lib/connectors/connectors";
-import { useState, useEffect } from "react";
 import { useUser } from "@/components/user/UserProvider";
-import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
 
 export const GmailMain = () => {
-  const { isLoadingUser, isAdmin } = useUser();
+  const { isLoadingUser, isAdmin, user } = useUser();
 
   const {
     data: appCredentialData,
@@ -143,7 +142,7 @@ export const GmailMain = () => {
           <Title className="mb-2 mt-6 ml-auto mr-auto">
             Step 2: Authenticate with Danswer
           </Title>
-          <GmailOAuthSection
+          <GmailAuthSection
             setPopup={setPopup}
             refreshCredentials={refreshCredentials}
             gmailPublicCredential={gmailPublicCredential}
@@ -151,6 +150,7 @@ export const GmailMain = () => {
             appCredentialData={appCredentialData}
             serviceAccountKeyData={serviceAccountKeyData}
             connectorExists={gmailConnectorIndexingStatuses.length > 0}
+            user={user}
           />
         </>
       )}

@@ -222,6 +222,7 @@ class CCPairFullInfo(BaseModel):
     access_type: AccessType
     is_editable_for_current_user: bool
     deletion_failure_message: str | None
+    indexing: bool
 
     @classmethod
     def from_models(
@@ -232,6 +233,7 @@ class CCPairFullInfo(BaseModel):
         last_index_attempt: IndexAttempt | None,
         num_docs_indexed: int,  # not ideal, but this must be computed separately
         is_editable_for_current_user: bool,
+        indexing: bool,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -265,10 +267,11 @@ class CCPairFullInfo(BaseModel):
             access_type=cc_pair_model.access_type,
             is_editable_for_current_user=is_editable_for_current_user,
             deletion_failure_message=cc_pair_model.deletion_failure_message,
+            indexing=indexing,
         )
 
 
-class CCPairPruningTask(BaseModel):
+class CeleryTaskStatus(BaseModel):
     id: str
     name: str
     status: TaskStatus
@@ -306,6 +309,10 @@ class ConnectorIndexingStatus(BaseModel):
     latest_index_attempt: IndexAttemptSnapshot | None
     deletion_attempt: DeletionAttemptSnapshot | None
     is_deletable: bool
+
+    # index attempt in db can be marked successful while celery/redis
+    # is stil running/cleaning up
+    in_progress: bool
 
 
 class ConnectorCredentialPairIdentifier(BaseModel):
@@ -370,16 +377,16 @@ class GoogleServiceAccountKey(BaseModel):
 
 
 class GoogleServiceAccountCredentialRequest(BaseModel):
-    google_drive_delegated_user: str | None = None  # email of user to impersonate
-    gmail_delegated_user: str | None = None  # email of user to impersonate
+    google_drive_primary_admin: str | None = None  # email of user to impersonate
+    gmail_primary_admin: str | None = None  # email of user to impersonate
 
     @model_validator(mode="after")
     def check_user_delegation(self) -> "GoogleServiceAccountCredentialRequest":
-        if (self.google_drive_delegated_user is None) == (
-            self.gmail_delegated_user is None
+        if (self.google_drive_primary_admin is None) == (
+            self.gmail_primary_admin is None
         ):
             raise ValueError(
-                "Exactly one of google_drive_delegated_user or gmail_delegated_user must be set"
+                "Exactly one of google_drive_primary_admin or gmail_primary_admin must be set"
             )
         return self
 

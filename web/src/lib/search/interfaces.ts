@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@tremor/react";
+import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { Tag, ValidSources } from "../types";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
@@ -152,7 +152,7 @@ export interface SearchRequestArgs {
   updateError: (error: string) => void;
   updateMessageAndThreadId: (
     messageId: number,
-    chat_session_id: number
+    chat_session_id: string
   ) => void;
   finishedSearching: () => void;
   updateComments: (comments: any) => void;

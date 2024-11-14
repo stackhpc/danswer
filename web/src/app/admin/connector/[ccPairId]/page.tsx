@@ -1,29 +1,31 @@
 "use client";
 
-import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
-import { CCPairStatus } from "@/components/Status";
 import { BackButton } from "@/components/BackButton";
-import { Button, Divider, Title } from "@tremor/react";
-import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
-import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
-import { ModifyStatusButtonCluster } from "./ModifyStatusButtonCluster";
-import { DeletionButton } from "./DeletionButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ReIndexButton } from "./ReIndexButton";
-import { ValidSources } from "@/lib/types";
-import useSWR, { mutate } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ThreeDotsLoader } from "@/components/Loading";
-import CredentialSection from "@/components/credentials/CredentialSection";
-import { buildCCPairInfoUrl } from "./lib";
 import { SourceIcon } from "@/components/SourceIcon";
-import { credentialTemplates } from "@/lib/connectors/credentials";
-import { useEffect, useRef, useState } from "react";
-import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
+import { CCPairStatus } from "@/components/Status";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import CredentialSection from "@/components/credentials/CredentialSection";
+import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
 import { updateConnectorCredentialPairName } from "@/lib/connector";
-import DeletionErrorStatus from "./DeletionErrorStatus";
+import { credentialTemplates } from "@/lib/connectors/credentials";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { ValidSources } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import Title from "@/components/ui/title";
+import { Separator } from "@/components/ui/separator";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import useSWR, { mutate } from "swr";
+import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
+import { DeletionButton } from "./DeletionButton";
+import DeletionErrorStatus from "./DeletionErrorStatus";
+import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
+import { ModifyStatusButtonCluster } from "./ModifyStatusButtonCluster";
+import { ReIndexButton } from "./ReIndexButton";
+import { buildCCPairInfoUrl } from "./lib";
+import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
 
 // since the uploaded files are cleaned up after some period of time
 // re-indexing will not work for the file connector. Also, it would not
@@ -49,15 +51,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   const { popup, setPopup } = usePopup();
 
-  const finishConnectorDeletion = () => {
-    setPopup({
-      message: "Connector deleted successfully",
-      type: "success",
-    });
-    setTimeout(() => {
-      router.push("/admin/indexing/status");
-    }, 2000);
-  };
+  const finishConnectorDeletion = useCallback(() => {
+    router.push("/admin/indexing/status?message=connector-deleted");
+  }, [router]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -80,7 +76,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     ) {
       finishConnectorDeletion();
     }
-  }, [isLoading, ccPair, error, hasLoadedOnce, router]);
+  }, [isLoading, ccPair, error, hasLoadedOnce, finishConnectorDeletion]);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setEditableName(e.target.value);
@@ -146,7 +142,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
   return (
     <>
       {popup}
-      <BackButton />
+      <BackButton
+        behaviorOverride={() => router.push("/admin/indexing/status")}
+      />
       <div className="pb-1 flex mt-1">
         <div className="mr-2 my-auto">
           <SourceIcon iconSize={24} sourceType={ccPair.connector.source} />
@@ -161,10 +159,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
               onChange={handleNameChange}
               className="text-3xl w-full ring ring-1 ring-neutral-800 text-emphasis font-bold"
             />
-            <Button onClick={handleUpdateName} className="ml-2">
+            <Button onClick={handleUpdateName}>
               <CheckmarkIcon className="text-neutral-200" />
             </Button>
-            <Button onClick={() => resetEditing()} className="ml-2">
+            <Button onClick={() => resetEditing()}>
               <XIcon className="text-neutral-200" />
             </Button>
           </div>
@@ -173,7 +171,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
             onClick={() =>
               ccPair.is_editable_for_current_user && startEditing()
             }
-            className={`group flex ${ccPair.is_editable_for_current_user ? "cursor-pointer" : ""} text-3xl text-emphasis gap-x-2 items-center font-bold`}
+            className={`group flex ${
+              ccPair.is_editable_for_current_user ? "cursor-pointer" : ""
+            } text-3xl text-emphasis gap-x-2 items-center font-bold`}
           >
             {ccPair.name}
             {ccPair.is_editable_for_current_user && (
@@ -192,8 +192,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 connectorId={ccPair.connector.id}
                 credentialId={ccPair.credential.id}
                 isDisabled={
+                  ccPair.indexing ||
                   ccPair.status === ConnectorCredentialPairStatus.PAUSED
                 }
+                isIndexing={ccPair.indexing}
                 isDeleting={isDeleting}
               />
             )}
@@ -231,7 +233,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {credentialTemplates[ccPair.connector.source] &&
         ccPair.is_editable_for_current_user && (
           <>
-            <Divider />
+            <Separator />
 
             <Title className="mb-2">Credentials</Title>
 
@@ -242,7 +244,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             />
           </>
         )}
-      <Divider />
+      <Separator />
       <ConfigDisplay
         connectorSpecificConfig={ccPair.connector.connector_specific_config}
         sourceType={ccPair.connector.source}
@@ -264,7 +266,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
         <IndexingAttemptsTable ccPair={ccPair} />
       </div>
-      <Divider />
+      <Separator />
       <div className="flex mt-4">
         <div className="mx-auto">
           {ccPair.is_editable_for_current_user && (
@@ -276,7 +278,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   );
 }
 
-export default function Page({ params }: { params: { ccPairId: string } }) {
+export default function Page(props: { params: Promise<{ ccPairId: string }> }) {
+  const params = use(props.params);
   const ccPairId = parseInt(params.ccPairId);
 
   return (

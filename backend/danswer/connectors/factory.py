@@ -4,6 +4,7 @@ from typing import Type
 from sqlalchemy.orm import Session
 
 from danswer.configs.constants import DocumentSource
+from danswer.configs.constants import DocumentSourceRequiringTenantContext
 from danswer.connectors.asana.connector import AsanaConnector
 from danswer.connectors.axero.connector import AxeroConnector
 from danswer.connectors.blob.connector import BlobStorageConnector
@@ -15,6 +16,7 @@ from danswer.connectors.discourse.connector import DiscourseConnector
 from danswer.connectors.document360.connector import Document360Connector
 from danswer.connectors.dropbox.connector import DropboxConnector
 from danswer.connectors.file.connector import LocalFileConnector
+from danswer.connectors.freshdesk.connector import FreshdeskConnector
 from danswer.connectors.github.connector import GithubConnector
 from danswer.connectors.gitlab.connector import GitlabConnector
 from danswer.connectors.gmail.connector import GmailConnector
@@ -33,7 +35,6 @@ from danswer.connectors.mediawiki.wiki import MediaWikiConnector
 from danswer.connectors.models import InputType
 from danswer.connectors.notion.connector import NotionConnector
 from danswer.connectors.productboard.connector import ProductboardConnector
-from danswer.connectors.requesttracker.connector import RequestTrackerConnector
 from danswer.connectors.salesforce.connector import SalesforceConnector
 from danswer.connectors.sharepoint.connector import SharepointConnector
 from danswer.connectors.slab.connector import SlabConnector
@@ -63,7 +64,7 @@ def identify_connector_class(
         DocumentSource.SLACK: {
             InputType.LOAD_STATE: SlackLoadConnector,
             InputType.POLL: SlackPollConnector,
-            InputType.PRUNE: SlackPollConnector,
+            InputType.SLIM_RETRIEVAL: SlackPollConnector,
         },
         DocumentSource.GITHUB: GithubConnector,
         DocumentSource.GMAIL: GmailConnector,
@@ -76,7 +77,6 @@ def identify_connector_class(
         DocumentSource.SLAB: SlabConnector,
         DocumentSource.NOTION: NotionConnector,
         DocumentSource.ZULIP: ZulipConnector,
-        DocumentSource.REQUESTTRACKER: RequestTrackerConnector,
         DocumentSource.GURU: GuruConnector,
         DocumentSource.LINEAR: LinearConnector,
         DocumentSource.HUBSPOT: HubSpotConnector,
@@ -100,6 +100,7 @@ def identify_connector_class(
         DocumentSource.GOOGLE_CLOUD_STORAGE: BlobStorageConnector,
         DocumentSource.OCI_STORAGE: BlobStorageConnector,
         DocumentSource.XENFORO: XenforoConnector,
+        DocumentSource.FRESHDESK: FreshdeskConnector,
     }
     connector_by_source = connector_map.get(source, {})
 
@@ -134,8 +135,13 @@ def instantiate_connector(
     input_type: InputType,
     connector_specific_config: dict[str, Any],
     credential: Credential,
+    tenant_id: str | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
+
+    if source in DocumentSourceRequiringTenantContext:
+        connector_specific_config["tenant_id"] = tenant_id
+
     connector = connector_class(**connector_specific_config)
     new_credentials = connector.load_credentials(credential.credential_json)
 

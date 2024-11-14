@@ -16,7 +16,7 @@ from danswer.connectors.interfaces import LoadConnector
 from danswer.connectors.models import BasicExpertInfo
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
-from danswer.db.engine import get_sqlalchemy_engine
+from danswer.db.engine import get_session_with_tenant
 from danswer.file_processing.extract_file_text import check_file_ext_is_valid
 from danswer.file_processing.extract_file_text import detect_encoding
 from danswer.file_processing.extract_file_text import extract_file_text
@@ -27,6 +27,8 @@ from danswer.file_processing.extract_file_text import read_pdf_file
 from danswer.file_processing.extract_file_text import read_text_file
 from danswer.file_store.file_store import get_default_file_store
 from danswer.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -74,13 +76,14 @@ def _process_file(
         )
 
     # Using the PDF reader function directly to pass in password cleanly
-    elif extension == ".pdf":
+    elif extension == ".pdf" and pdf_pass is not None:
         file_content_raw, file_metadata = read_pdf_file(file=file, pdf_pass=pdf_pass)
 
     else:
         file_content_raw = extract_file_text(
-            file_name=file_name,
             file=file,
+            file_name=file_name,
+            break_on_unprocessable=True,
         )
 
     all_metadata = {**metadata, **file_metadata} if metadata else file_metadata
@@ -158,10 +161,12 @@ class LocalFileConnector(LoadConnector):
     def __init__(
         self,
         file_locations: list[Path | str],
+        tenant_id: str = POSTGRES_DEFAULT_SCHEMA,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [Path(file_location) for file_location in file_locations]
         self.batch_size = batch_size
+        self.tenant_id = tenant_id
         self.pdf_pass: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -170,7 +175,9 @@ class LocalFileConnector(LoadConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         documents: list[Document] = []
-        with Session(get_sqlalchemy_engine()) as db_session:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
+
+        with get_session_with_tenant(self.tenant_id) as db_session:
             for file_path in self.file_locations:
                 current_datetime = datetime.now(timezone.utc)
                 files = _read_files_and_metadata(
@@ -191,6 +198,8 @@ class LocalFileConnector(LoadConnector):
 
             if documents:
                 yield documents
+
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 if __name__ == "__main__":

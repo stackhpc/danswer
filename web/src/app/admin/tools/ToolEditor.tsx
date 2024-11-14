@@ -13,7 +13,7 @@ import {
 import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/admin/connectors/Field";
-import { Button, Divider, Text } from "@tremor/react";
+import { Button } from "@/components/ui/button";
 import {
   createCustomTool,
   updateCustomTool,
@@ -23,6 +23,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import debounce from "lodash/debounce";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Link from "next/link";
+import { Separator } from "@/components/ui/separator";
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -64,28 +65,31 @@ function ToolForm({
   const [definitionError, setDefinitionError] = definitionErrorState;
   const [methodSpecs, setMethodSpecs] = methodSpecsState;
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-
   const debouncedValidateDefinition = useCallback(
-    debounce(async (definition: string) => {
-      try {
-        const parsedDefinition = parseJsonWithTrailingCommas(definition);
-        const response = await validateToolDefinition({
-          definition: parsedDefinition,
-        });
-        if (response.error) {
+    (definition: string) => {
+      const validateDefinition = async () => {
+        try {
+          const parsedDefinition = parseJsonWithTrailingCommas(definition);
+          const response = await validateToolDefinition({
+            definition: parsedDefinition,
+          });
+          if (response.error) {
+            setMethodSpecs(null);
+            setDefinitionError(response.error);
+          } else {
+            setMethodSpecs(response.data);
+            setDefinitionError(null);
+          }
+        } catch (error) {
+          console.log(error);
           setMethodSpecs(null);
-          setDefinitionError(response.error);
-        } else {
-          setMethodSpecs(response.data);
-          setDefinitionError(null);
+          setDefinitionError("Invalid JSON format");
         }
-      } catch (error) {
-        console.log(error);
-        setMethodSpecs(null);
-        setDefinitionError("Invalid JSON format");
-      }
-    }, 300),
-    []
+      };
+
+      debounce(validateDefinition, 300)();
+    },
+    [setMethodSpecs, setDefinitionError]
   );
 
   useEffect(() => {
@@ -241,7 +245,7 @@ function ToolForm({
                           <Button
                             type="button"
                             onClick={() => arrayHelpers.remove(index)}
-                            color="red"
+                            variant="destructive"
                             size="sm"
                             className="transition-colors duration-200 hover:bg-red-600"
                           >
@@ -256,8 +260,8 @@ function ToolForm({
                 <Button
                   type="button"
                   onClick={() => arrayHelpers.push({ key: "", value: "" })}
-                  color="blue"
-                  size="md"
+                  variant="secondary"
+                  size="sm"
                   className="transition-colors duration-200"
                 >
                   Add New Header
@@ -268,13 +272,13 @@ function ToolForm({
         </div>
       )}
 
-      <Divider />
+      <Separator />
 
       <div className="flex">
         <Button
           className="mx-auto"
-          color="green"
-          size="md"
+          variant="submit"
+          size="sm"
           type="submit"
           disabled={isSubmitting || !!definitionError}
         >
@@ -318,10 +322,11 @@ export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
       <Formik
         initialValues={{
           definition: prettifiedDefinition,
-          customHeaders: tool?.custom_headers?.map((header) => ({
-            key: header.key,
-            value: header.value,
-          })) ?? [{ key: "test", value: "value" }],
+          customHeaders:
+            tool?.custom_headers?.map((header) => ({
+              key: header.key,
+              value: header.value,
+            })) ?? [],
         }}
         validationSchema={ToolSchema}
         onSubmit={async (values: ToolFormValues) => {

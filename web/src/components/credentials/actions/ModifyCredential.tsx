@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Modal } from "@/components/Modal";
-import { Button, Text, Badge } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+import Text from "@/components/ui/text";
+import { Badge } from "@/components/ui/badge";
 import { ValidSources } from "@/lib/types";
 import {
   EditIcon,
@@ -54,9 +56,9 @@ const CredentialSelectionTable = ({
   };
 
   return (
-    <div className="w-full overflow-auto">
+    <div className="w-full max-h-[50vh] overflow-auto">
       <table className="w-full text-sm border-collapse">
-        <thead>
+        <thead className="sticky top-0 w-full">
           <tr className="bg-gray-100">
             <th className="p-2 text-left font-medium text-gray-600"></th>
             <th className="p-2 text-left font-medium text-gray-600">ID</th>
@@ -70,7 +72,7 @@ const CredentialSelectionTable = ({
         </thead>
 
         {allCredentials.length > 0 && (
-          <tbody>
+          <tbody className="w-full">
             {allCredentials.map((credential, ind) => {
               const selected = currentCredentialId
                 ? credential.id == (selectedCredentialId || currentCredentialId)

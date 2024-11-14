@@ -10,16 +10,10 @@ import { CCPairBasicInfo, DocumentSet, Tag, User } from "@/lib/types";
 import { cookies } from "next/headers";
 import { SearchType } from "@/lib/search/interfaces";
 import { Persona } from "../admin/assistants/interfaces";
-import {
-  WelcomeModal,
-  hasCompletedWelcomeFlowSS,
-} from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { unstable_noStore as noStore } from "next/cache";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { personaComparator } from "../admin/assistants/lib";
 import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
-import { NoSourcesModal } from "@/components/initialSetup/search/NoSourcesModal";
-import { NoCompleteSourcesModal } from "@/components/initialSetup/search/NoCompleteSourceModal";
 import { ChatPopup } from "../chat/ChatPopup";
 import {
   FetchAssistantsResponse,
@@ -34,14 +28,23 @@ import {
 } from "@/lib/constants";
 import WrappedSearch from "./WrappedSearch";
 import { SearchProvider } from "@/components/context/SearchContext";
-import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
+import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
+import { LLMProviderDescriptor } from "../admin/configuration/llm/interfaces";
+import { headers } from "next/headers";
+import {
+  hasCompletedWelcomeFlowSS,
+  WelcomeModal,
+} from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 
-export default async function Home() {
+export default async function Home(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const searchParams = await props.searchParams;
   // Disable caching so we always get the up to date connector / document set / persona info
   // importantly, this prevents users from adding a connector, going back to the main page,
   // and then getting hit with a "No Connectors" popup
   noStore();
-
+  const requestCookies = await cookies();
   const tasks = [
     getAuthTypeMetadataSS(),
     getCurrentUserSS(),
@@ -49,8 +52,8 @@ export default async function Home() {
     fetchSS("/manage/document-set"),
     fetchAssistantsSS(),
     fetchSS("/query/valid-tags"),
-    fetchSS("/search-settings/get-all-search-settings"),
     fetchSS("/query/user-searches"),
+    fetchLLMProvidersSS(),
   ];
 
   // catch cases where the backend is completely unreachable here
@@ -62,8 +65,9 @@ export default async function Home() {
     | AuthTypeMetadata
     | FullEmbeddingModelResponse
     | FetchAssistantsResponse
+    | LLMProviderDescriptor[]
     | null
-  )[] = [null, null, null, null, null, null];
+  )[] = [null, null, null, null, null, null, null, null];
   try {
     results = await Promise.all(tasks);
   } catch (e) {
@@ -76,12 +80,21 @@ export default async function Home() {
   const [initialAssistantsList, assistantsFetchError] =
     results[4] as FetchAssistantsResponse;
   const tagsResponse = results[5] as Response | null;
-  const embeddingModelResponse = results[6] as Response | null;
-  const queryResponse = results[7] as Response | null;
+  const queryResponse = results[6] as Response | null;
+  const llmProviders = (results[7] || []) as LLMProviderDescriptor[];
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
+
   if (!authDisabled && !user) {
-    return redirect("/auth/login");
+    const headersList = await headers();
+    const fullUrl = headersList.get("x-url") || "/search";
+    const searchParamsString = new URLSearchParams(
+      searchParams as unknown as Record<string, string>
+    ).toString();
+    const redirectUrl = searchParamsString
+      ? `${fullUrl}?${searchParamsString}`
+      : fullUrl;
+    return redirect(`/auth/login?next=${encodeURIComponent(redirectUrl)}`);
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
@@ -130,29 +143,21 @@ export default async function Home() {
     console.log(`Failed to fetch tags - ${tagsResponse?.status}`);
   }
 
-  const embeddingModelVersionInfo =
-    embeddingModelResponse && embeddingModelResponse.ok
-      ? ((await embeddingModelResponse.json()) as FullEmbeddingModelResponse)
-      : null;
-
-  const currentEmbeddingModelName =
-    embeddingModelVersionInfo?.current_model_name;
-  const nextEmbeddingModelName =
-    embeddingModelVersionInfo?.secondary_model_name;
-
   // needs to be done in a non-client side component due to nextjs
-  const storedSearchType = cookies().get("searchType")?.value as
+  const storedSearchType = requestCookies.get("searchType")?.value as
     | string
     | undefined;
-  let searchTypeDefault: SearchType =
+  const searchTypeDefault: SearchType =
     storedSearchType !== undefined &&
     SearchType.hasOwnProperty(storedSearchType)
       ? (storedSearchType as SearchType)
       : SearchType.SEMANTIC; // default to semantic
 
   const hasAnyConnectors = ccPairs.length > 0;
+
   const shouldShowWelcomeModal =
-    !hasCompletedWelcomeFlowSS() &&
+    !llmProviders.length &&
+    !hasCompletedWelcomeFlowSS(requestCookies) &&
     !hasAnyConnectors &&
     (!user || user.role === "admin");
 
@@ -161,16 +166,10 @@ export default async function Home() {
     ccPairs.length === 0 &&
     !shouldShowWelcomeModal;
 
-  const shouldDisplaySourcesIncompleteModal =
-    !ccPairs.some(
-      (ccPair) => ccPair.has_successful_run && ccPair.docs_indexed > 0
-    ) &&
-    !shouldDisplayNoSourcesModal &&
-    !shouldShowWelcomeModal &&
-    (!user || user.role == "admin");
-
-  const sidebarToggled = cookies().get(SIDEBAR_TOGGLED_COOKIE_NAME);
-  const agenticSearchToggle = cookies().get(AGENTIC_SEARCH_TYPE_COOKIE_NAME);
+  const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
+  const agenticSearchToggle = requestCookies.get(
+    AGENTIC_SEARCH_TYPE_COOKIE_NAME
+  );
 
   const toggleSidebar = sidebarToggled
     ? sidebarToggled.value.toLocaleLowerCase() == "true" || false
@@ -183,19 +182,13 @@ export default async function Home() {
   return (
     <>
       <HealthCheckBanner />
-      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
       <InstantSSRAutoRefresh />
-
-      {shouldDisplayNoSourcesModal && <NoSourcesModal />}
-
-      {shouldDisplaySourcesIncompleteModal && (
-        <NoCompleteSourcesModal ccPairs={ccPairs} />
+      {shouldShowWelcomeModal && (
+        <WelcomeModal user={user} requestCookies={requestCookies} />
       )}
-
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
       <ChatPopup />
-
       <SearchProvider
         value={{
           querySessions,

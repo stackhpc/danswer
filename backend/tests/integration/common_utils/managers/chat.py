@@ -1,4 +1,5 @@
 import json
+from uuid import UUID
 
 import requests
 from requests.models import Response
@@ -22,7 +23,7 @@ from tests.integration.common_utils.test_models import StreamedResponse
 class ChatSessionManager:
     @staticmethod
     def create(
-        persona_id: int = -1,
+        persona_id: int = 0,
         description: str = "Test chat session",
         user_performing_action: DATestUser | None = None,
     ) -> DATestChatSession:
@@ -44,7 +45,7 @@ class ChatSessionManager:
 
     @staticmethod
     def send_message(
-        chat_session_id: int,
+        chat_session_id: UUID,
         message: str,
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,

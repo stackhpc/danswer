@@ -7,17 +7,14 @@ from typing import Any
 from celery import shared_task
 from celery.contrib.abortable import AbortableTask  # type: ignore
 from celery.exceptions import TaskRevokedError
-from celery.utils.log import get_task_logger
 from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from danswer.background.celery.apps.app_base import task_logger
 from danswer.configs.app_configs import JOB_TIMEOUT
 from danswer.configs.constants import PostgresAdvisoryLocks
-from danswer.db.engine import get_sqlalchemy_engine  # type: ignore
-
-# use this within celery tasks to get celery task specific logging
-task_logger = get_task_logger(__name__)
+from danswer.db.engine import get_session_with_tenant
 
 
 @shared_task(
@@ -26,7 +23,7 @@ task_logger = get_task_logger(__name__)
     bind=True,
     base=AbortableTask,
 )
-def kombu_message_cleanup_task(self: Any) -> int:
+def kombu_message_cleanup_task(self: Any, tenant_id: str | None) -> int:
     """Runs periodically to clean up the kombu_message table"""
 
     # we will select messages older than this amount to clean up
@@ -38,7 +35,7 @@ def kombu_message_cleanup_task(self: Any) -> int:
     ctx["deleted"] = 0
     ctx["cleanup_age"] = KOMBU_MESSAGE_CLEANUP_AGE
     ctx["page_limit"] = KOMBU_MESSAGE_CLEANUP_PAGE_LIMIT
-    with Session(get_sqlalchemy_engine()) as db_session:
+    with get_session_with_tenant(tenant_id) as db_session:
         # Exit the task if we can't take the advisory lock
         result = db_session.execute(
             text("SELECT pg_try_advisory_lock(:id)"),

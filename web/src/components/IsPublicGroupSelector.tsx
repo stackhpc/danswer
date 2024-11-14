@@ -1,8 +1,9 @@
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
-import { Text, Divider } from "@tremor/react";
+import Text from "@/components/ui/text";
 import { FiUsers } from "react-icons/fi";
+import { Separator } from "@/components/ui/separator";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/admin/connectors/Field";
@@ -49,12 +50,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
         setShouldHideContent(false);
       }
     }
-  }, [
-    user,
-    userGroups,
-    formikProps.setFieldValue,
-    formikProps.values.is_public,
-  ]);
+  }, [user, userGroups, isPaidEnterpriseFeaturesEnabled]);
 
   if (isLoadingUser || userGroupsIsLoading) {
     return <div>Loading...</div>;
@@ -78,7 +74,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 
   return (
     <div>
-      <Divider />
+      <Separator />
       {isAdmin && (
         <>
           <BooleanFormField
@@ -153,7 +149,9 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                         w-fit 
                         flex 
                         cursor-pointer 
-                        ${isSelected ? "bg-background-strong" : "hover:bg-hover"}
+                        ${
+                          isSelected ? "bg-background-strong" : "hover:bg-hover"
+                        }
                       `}
                           onClick={() => {
                             if (isSelected) {

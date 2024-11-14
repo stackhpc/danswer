@@ -21,13 +21,11 @@ import {
   LoopioIcon,
   NotionIcon,
   ProductboardIcon,
-  RequestTrackerIcon,
   R2Icon,
   SalesforceIcon,
   SharepointIcon,
   TeamsIcon,
   SlabIcon,
-  SlackIcon,
   ZendeskIcon,
   ZulipIcon,
   MediaWikiIcon,
@@ -38,6 +36,7 @@ import {
   GoogleStorageIcon,
   ColorSlackIcon,
   XenforoIcon,
+  FreshdeskIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -244,12 +243,6 @@ const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.danswer.dev/connectors/mediawiki",
   },
-  requesttracker: {
-    icon: RequestTrackerIcon,
-    displayName: "Request Tracker",
-    category: SourceCategory.CustomerSupport,
-    docs: "https://docs.danswer.dev/connectors/requesttracker",
-  },
   clickup: {
     icon: ClickupIcon,
     displayName: "Clickup",
@@ -289,6 +282,12 @@ const SOURCE_METADATA_MAP: SourceMap = {
     icon: GlobeIcon,
     displayName: "Ingestion",
     category: SourceCategory.Other,
+  },
+  freshdesk: {
+    icon: FreshdeskIcon,
+    displayName: "Freshdesk",
+    category: SourceCategory.CustomerSupport,
+    docs: "https://docs.danswer.dev/connectors/freshdesk",
   },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
@@ -357,11 +356,4 @@ export function getSourcesForPersona(persona: Persona): ValidSources[] {
     });
   });
   return personaSources;
-}
-
-function stripTrailingSlash(str: string) {
-  if (str.substr(-1) === "/") {
-    return str.substr(0, str.length - 1);
-  }
-  return str;
 }

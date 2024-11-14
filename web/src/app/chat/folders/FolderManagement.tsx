@@ -1,5 +1,3 @@
-import { useState, useEffect, FC } from "react";
-
 // Function to create a new folder
 export async function createFolder(folderName: string): Promise<number> {
   const response = await fetch("/api/folder", {
@@ -19,7 +17,7 @@ export async function createFolder(folderName: string): Promise<number> {
 // Function to add a chat session to a folder
 export async function addChatToFolder(
   folderId: number,
-  chatSessionId: number
+  chatSessionId: string
 ): Promise<void> {
   const response = await fetch(`/api/folder/${folderId}/add-chat-session`, {
     method: "POST",
@@ -36,7 +34,7 @@ export async function addChatToFolder(
 // Function to remove a chat session from a folder
 export async function removeChatFromFolder(
   folderId: number,
-  chatSessionId: number
+  chatSessionId: string
 ): Promise<void> {
   const response = await fetch(`/api/folder/${folderId}/remove-chat-session`, {
     method: "POST",

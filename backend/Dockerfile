@@ -8,9 +8,10 @@ LABEL com.danswer.description="This image is the web/frontend container of Dansw
     founders@danswer.ai for more information. Please visit https://github.com/danswer-ai/danswer"
 
 # Default DANSWER_VERSION, typically overriden during builds by GitHub Actions.
-ARG DANSWER_VERSION=0.3-dev
+ARG DANSWER_VERSION=0.8-dev
 ENV DANSWER_VERSION=${DANSWER_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true"
+
 
 RUN echo "DANSWER_VERSION: ${DANSWER_VERSION}"
 # Install system dependencies
@@ -35,6 +36,8 @@ RUN apt-get update && \
     gcc && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
+
+
 
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE
@@ -74,7 +77,6 @@ RUN apt-get update && \
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
 
-
 # Pre-downloading NLTK for setups with limited egress
 RUN python -c "import nltk; \
 nltk.download('stopwords', quiet=True); \
@@ -92,6 +94,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY ./danswer /app/danswer
 COPY ./shared_configs /app/shared_configs
 COPY ./alembic /app/alembic
+COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 

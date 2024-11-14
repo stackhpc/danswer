@@ -4,9 +4,7 @@ import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
 import { UserGroupCreationForm } from "./UserGroupCreationForm";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { useState, useEffect } from "react";
-import { getCurrentUser } from "@/lib/user";
-import { User, UserRole } from "@/lib/types";
+import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import {
   useConnectorCredentialIndexingStatus,
@@ -14,8 +12,10 @@ import {
   useUsers,
 } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Button, Divider } from "@tremor/react";
+import { Button } from "@/components/ui/button";
+
 import { useUser } from "@/components/user/UserProvider";
+import { Separator } from "@/components/ui/separator";
 
 const Main = () => {
   const { popup, setPopup } = usePopup();
@@ -61,14 +61,17 @@ const Main = () => {
       {popup}
       {isAdmin && (
         <div className="my-3">
-          <Button size="xs" color="green" onClick={() => setShowForm(true)}>
+          <Button
+            size="sm"
+            variant="navigate"
+            onClick={() => setShowForm(true)}
+          >
             Create New User Group
           </Button>
         </div>
       )}
       {data.length > 0 && (
         <div>
-          {isAdmin && <Divider />}
           <UserGroupsTable
             userGroups={data}
             setPopup={setPopup}

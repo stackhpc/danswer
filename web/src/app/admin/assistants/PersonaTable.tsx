@@ -1,6 +1,6 @@
 "use client";
 
-import { Text } from "@tremor/react";
+import Text from "@/components/ui/text";
 import { Persona } from "./interfaces";
 import { useRouter } from "next/navigation";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
@@ -15,17 +15,20 @@ import {
 } from "./lib";
 import { FiEdit2 } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
-import { getCurrentUser } from "@/lib/user";
-import { UserRole, User } from "@/lib/types";
 import { useUser } from "@/components/user/UserProvider";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
-  if (persona.is_default_persona) {
+  if (persona.builtin_persona) {
     return <Text>Built-In</Text>;
   }
 
+  if (persona.is_default_persona) {
+    return <Text>Default</Text>;
+  }
+
   if (persona.is_public) {
-    return <Text>Global</Text>;
+    return <Text>Public</Text>;
   }
 
   if (persona.groups.length > 0 || persona.users.length > 0) {
@@ -35,43 +38,36 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
 }
 
-export function PersonasTable({
-  allPersonas,
-  editablePersonas,
-}: {
-  allPersonas: Persona[];
-  editablePersonas: Persona[];
-}) {
+export function PersonasTable() {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
+  const { refreshUser, isLoadingUser, isAdmin } = useUser();
+  const {
+    allAssistants: assistants,
+    refreshAssistants,
+    editablePersonas,
+  } = useAssistants();
 
-  const { isLoadingUser, isAdmin } = useUser();
+  const editablePersonaIds = useMemo(() => {
+    return new Set(editablePersonas.map((p) => p.id.toString()));
+  }, [editablePersonas]);
 
-  const editablePersonaIds = new Set(
-    editablePersonas.map((p) => p.id.toString())
-  );
+  const [finalPersonas, setFinalPersonas] = useState<Persona[]>([]);
 
-  const sortedPersonas = useMemo(() => {
+  useEffect(() => {
     const editable = editablePersonas.sort(personaComparator);
-    const nonEditable = allPersonas
+    const nonEditable = assistants
       .filter((p) => !editablePersonaIds.has(p.id.toString()))
       .sort(personaComparator);
-    return [...editable, ...nonEditable];
-  }, [allPersonas, editablePersonas]);
-
-  const [finalPersonas, setFinalPersonas] = useState<string[]>(
-    sortedPersonas.map((persona) => persona.id.toString())
-  );
-  const finalPersonaValues = finalPersonas
-    .filter((id) => new Set(allPersonas.map((p) => p.id.toString())).has(id))
-    .map((id) => {
-      return sortedPersonas.find(
-        (persona) => persona.id.toString() === id
-      ) as Persona;
-    });
+    setFinalPersonas([...editable, ...nonEditable]);
+  }, [editablePersonas, assistants, editablePersonaIds]);
 
   const updatePersonaOrder = async (orderedPersonaIds: UniqueIdentifier[]) => {
-    setFinalPersonas(orderedPersonaIds.map((id) => id.toString()));
+    const reorderedAssistants = orderedPersonaIds.map(
+      (id) => assistants.find((assistant) => assistant.id.toString() === id)!
+    );
+
+    setFinalPersonas(reorderedAssistants);
 
     const displayPriorityMap = new Map<UniqueIdentifier, number>();
     orderedPersonaIds.forEach((personaId, ind) => {
@@ -87,13 +83,19 @@ export function PersonasTable({
         display_priority_map: Object.fromEntries(displayPriorityMap),
       }),
     });
+
     if (!response.ok) {
       setPopup({
         type: "error",
         message: `Failed to update persona order - ${await response.text()}`,
       });
+      setFinalPersonas(assistants);
       router.refresh();
+      return;
     }
+
+    await refreshAssistants();
+    await refreshUser();
   };
 
   if (isLoadingUser) {
@@ -113,13 +115,13 @@ export function PersonasTable({
       <DraggableTable
         headers={["Name", "Description", "Type", "Is Visible", "Delete"]}
         isAdmin={isAdmin}
-        rows={finalPersonaValues.map((persona) => {
-          const isEditable = editablePersonaIds.has(persona.id.toString());
+        rows={finalPersonas.map((persona) => {
+          const isEditable = editablePersonas.includes(persona);
           return {
             id: persona.id.toString(),
             cells: [
               <div key="name" className="flex">
-                {!persona.is_default_persona && (
+                {!persona.builtin_persona && (
                   <FiEdit2
                     className="mr-1 my-auto cursor-pointer"
                     onClick={() =>
@@ -158,7 +160,9 @@ export function PersonasTable({
                     }
                   }
                 }}
-                className={`px-1 py-0.5 rounded flex ${isEditable ? "hover:bg-hover cursor-pointer" : ""} select-none w-fit`}
+                className={`px-1 py-0.5 rounded flex ${
+                  isEditable ? "hover:bg-hover cursor-pointer" : ""
+                } select-none w-fit`}
               >
                 <div className="my-auto w-12">
                   {!persona.is_visible ? (
@@ -172,8 +176,8 @@ export function PersonasTable({
                 </div>
               </div>,
               <div key="edit" className="flex">
-                <div className="mx-auto my-auto">
-                  {!persona.is_default_persona && isEditable ? (
+                <div className="mr-auto my-auto">
+                  {!persona.builtin_persona && isEditable ? (
                     <div
                       className="hover:bg-hover rounded p-1 cursor-pointer"
                       onClick={async () => {
