@@ -6,7 +6,7 @@ sources:
   - "https://github.com/stackhpc/danswer"
 type: application
 version: 0.2.4-prerelease.1
-appVersion: v0.12.0-stackhpc-prerelease.1
+appVersion: v0.12.0
 dependencies:
   - name: postgresql
     version: 14.3.1
