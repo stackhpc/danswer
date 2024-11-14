@@ -2,6 +2,36 @@ apiVersion: v1
 entries:
   danswer-stack:
   - apiVersion: v2
+    appVersion: v0.12.0
+    created: "2024-11-14T12:29:19.573820313Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: 14.3.1
+    - condition: vespa.enabled
+      name: vespa
+      repository: https://unoplat.github.io/vespa-helm-charts
+      version: 0.2.3
+    - condition: nginx.enabled
+      name: nginx
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 15.14.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://charts.bitnami.com/bitnami
+      version: 20.1.0
+    description: A Helm chart for Kubernetes
+    digest: 6c486b901eadb66e4d3e30f8a3db16e5a4be8364a211cfc75c1992b903548822
+    home: https://www.danswer.ai/
+    name: danswer-stack
+    sources:
+    - https://github.com/stackhpc/danswer
+    type: application
+    urls:
+    - https://github.com/stackhpc/danswer/releases/download/danswer-helm-0.2.4-prerelease.1/danswer-stack-0.2.4-prerelease.1.tgz
+    version: 0.2.4-prerelease.1
+  - apiVersion: v2
     appVersion: v0.7.4
     created: "2024-10-17T11:22:53.5719101Z"
     dependencies:
@@ -411,4 +441,4 @@ entries:
     urls:
     - https://github.com/stackhpc/danswer/releases/download/danswer-helm-0.1.0-azimuth.1/danswer-stack-0.1.0-azimuth.1.tgz
     version: 0.1.0-azimuth.1
-generated: "2024-10-17T11:22:53.572069267Z"
+generated: "2024-11-14T12:29:19.574245906Z"
