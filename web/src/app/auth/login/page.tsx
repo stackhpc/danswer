@@ -75,8 +75,8 @@ const Page = async (props: {
     return redirect(authUrl);
   }
 
-  const userHeader = headers().get('x-remote-user');
-  const groupsHeader = headers().get('x-remote-group');
+  const userHeader = (await headers()).get('x-remote-user');
+  const groupsHeader = (await headers()).get('x-remote-group');
 
   return (
     <AuthFlowContainer>
