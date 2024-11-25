@@ -14,8 +14,6 @@ import {
 import { ChatSession } from "@/app/chat/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { InputPrompt } from "@/app/admin/prompt-library/interfaces";
-import { FullEmbeddingModelResponse } from "@/components/embedding/interfaces";
-import { Settings } from "@/app/admin/settings/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
@@ -28,6 +26,7 @@ import {
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
+import { checkLLMSupportsImageInput } from "../llm/utils";
 
 interface FetchChatDataResult {
   user?: User | null;
@@ -66,6 +65,7 @@ export async function fetchSomeChatData(
   searchParams: { [key: string]: string },
   fetchOptions: FetchOption[] = []
 ): Promise<FetchChatDataResult | { redirect: string }> {
+  const requestCookies = await cookies();
   const tasks: Promise<any>[] = [];
   const taskMap: Record<FetchOption, () => Promise<any>> = {
     user: getCurrentUserSS,
@@ -178,10 +178,13 @@ export async function fetchSomeChatData(
       );
     }
 
-    const hasOpenAIProvider =
-      result.llmProviders &&
-      result.llmProviders.some((provider) => provider.provider === "openai");
-    if (!hasOpenAIProvider) {
+    const hasImageCompatibleModel = result.llmProviders?.some(
+      (provider) =>
+        provider.provider === "openai" ||
+        provider.model_names.some((model) => checkLLMSupportsImageInput(model))
+    );
+
+    if (!hasImageCompatibleModel) {
       result.assistants = result.assistants.filter(
         (assistant) =>
           !assistant.tools.some(
@@ -192,7 +195,7 @@ export async function fetchSomeChatData(
   }
 
   if (fetchOptions.includes("folders")) {
-    const openedFoldersCookie = cookies().get("openedFolders");
+    const openedFoldersCookie = requestCookies.get("openedFolders");
     result.openedFolders = openedFoldersCookie
       ? JSON.parse(openedFoldersCookie.value)
       : {};
@@ -203,10 +206,10 @@ export async function fetchSomeChatData(
     ? parseInt(defaultAssistantIdRaw)
     : undefined;
 
-  const documentSidebarCookieInitialWidth = cookies().get(
+  const documentSidebarCookieInitialWidth = requestCookies.get(
     DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME
   );
-  const sidebarToggled = cookies().get(SIDEBAR_TOGGLED_COOKIE_NAME);
+  const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
 
   result.toggleSidebar = sidebarToggled
     ? sidebarToggled.value.toLowerCase() === "true"
@@ -219,7 +222,7 @@ export async function fetchSomeChatData(
   if (fetchOptions.includes("ccPairs") && result.ccPairs) {
     const hasAnyConnectors = result.ccPairs.length > 0;
     result.shouldShowWelcomeModal =
-      !hasCompletedWelcomeFlowSS() &&
+      !hasCompletedWelcomeFlowSS(requestCookies) &&
       !hasAnyConnectors &&
       (!user || user.role === "admin");
 

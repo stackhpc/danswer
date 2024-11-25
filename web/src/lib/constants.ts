@@ -1,4 +1,10 @@
-export type AuthType = "disabled" | "basic" | "google_oauth" | "oidc" | "saml";
+export type AuthType =
+  | "disabled"
+  | "basic"
+  | "google_oauth"
+  | "oidc"
+  | "saml"
+  | "cloud";
 
 export const HOST_URL = process.env.WEB_DOMAIN || "http://127.0.0.1:3000";
 export const HEADER_HEIGHT = "h-16";
@@ -36,7 +42,8 @@ export const NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN =
 export const TOGGLED_CONNECTORS_COOKIE_NAME = "toggled_connectors";
 
 /* Enterprise-only settings */
-export const CUSTOM_REFRESH_URL = process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;
+export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
+  process.env.NEXT_PUBLIC_CUSTOM_REFRESH_URL;
 
 // NOTE: this should ONLY be used on the server-side. If used client side,
 // it will not be accurate (will always be false).
@@ -55,3 +62,12 @@ export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
 
 export const DISABLE_LLM_DOC_RELEVANCE =
   process.env.DISABLE_LLM_DOC_RELEVANCE?.toLowerCase() === "true";
+
+export const NEXT_PUBLIC_CLOUD_ENABLED =
+  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
+
+export const REGISTRATION_URL =
+  process.env.INTERNAL_URL || "http://127.0.0.1:3001";
+
+export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
+  process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";

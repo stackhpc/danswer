@@ -3,7 +3,7 @@ import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
-export interface UserPreferences {
+interface UserPreferences {
   chosen_assistants: number[] | null;
   visible_assistants: number[];
   hidden_assistants: number[];
@@ -42,6 +42,8 @@ export interface User {
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
+  is_cloud_superuser?: boolean;
+  organization_name: string | null;
 }
 
 export interface MinimalUserSnapshot {
@@ -111,6 +113,7 @@ export interface ConnectorIndexingStatus<
   latest_index_attempt: IndexAttemptSnapshot | null;
   deletion_attempt: DeletionAttemptSnapshot | null;
   is_deletable: boolean;
+  in_progress: boolean;
 }
 
 export interface CCPairBasicInfo {
@@ -240,7 +243,6 @@ const validSources = [
   "linear",
   "hubspot",
   "document360",
-  "requesttracker",
   "file",
   "google_sites",
   "loopio",
@@ -262,6 +264,7 @@ const validSources = [
   "oci_storage",
   "not_applicable",
   "ingestion_api",
+  "freshdesk",
 ] as const;
 
 export type ValidSources = (typeof validSources)[number];
@@ -275,6 +278,7 @@ export type ConfigurableSources = Exclude<
 export const validAutoSyncSources = [
   "confluence",
   "google_drive",
+  "gmail",
   "slack",
 ] as const;
 export type ValidAutoSyncSources = (typeof validAutoSyncSources)[number];

@@ -4,22 +4,15 @@ import {
   Filters,
   StreamStopInfo,
 } from "@/lib/search/interfaces";
-import { handleSSEStream, handleStream } from "@/lib/search/streamingUtils";
+import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "./types";
-import {
-  Dispatch,
-  MutableRefObject,
-  RefObject,
-  SetStateAction,
-  useEffect,
-  useRef,
-} from "react";
+import { MutableRefObject, RefObject, useEffect, useRef } from "react";
 import {
   BackendMessage,
   ChatSession,
   DocumentsResponse,
   FileDescriptor,
-  ImageGenerationDisplay,
+  FileChatDisplay,
   Message,
   MessageResponseIDInfo,
   RetrievalType,
@@ -62,7 +55,7 @@ export function getChatRetentionInfo(
 }
 
 export async function updateModelOverrideForChatSession(
-  chatSessionId: number,
+  chatSessionId: string,
   newAlternateModel: string
 ) {
   const response = await fetch("/api/chat/update-chat-session-model", {
@@ -81,7 +74,7 @@ export async function updateModelOverrideForChatSession(
 export async function createChatSession(
   personaId: number,
   description: string | null
-): Promise<number> {
+): Promise<string> {
   const createChatSessionResponse = await fetch(
     "/api/chat/create-chat-session",
     {
@@ -110,7 +103,7 @@ export type PacketType =
   | BackendMessage
   | AnswerPiecePacket
   | DocumentsResponse
-  | ImageGenerationDisplay
+  | FileChatDisplay
   | StreamingError
   | MessageResponseIDInfo
   | StreamStopInfo;
@@ -138,7 +131,7 @@ export async function* sendMessage({
   message: string;
   fileDescriptors: FileDescriptor[];
   parentMessageId: number | null;
-  chatSessionId: number;
+  chatSessionId: string;
   promptId: number | null | undefined;
   filters: Filters | null;
   selectedDocumentIds: number[] | null;
@@ -210,7 +203,7 @@ export async function* sendMessage({
   yield* handleSSEStream<PacketType>(response);
 }
 
-export async function nameChatSession(chatSessionId: number, message: string) {
+export async function nameChatSession(chatSessionId: string, message: string) {
   const response = await fetch("/api/chat/rename-chat-session", {
     method: "PUT",
     headers: {
@@ -259,7 +252,7 @@ export async function handleChatFeedback(
   return response;
 }
 export async function renameChatSession(
-  chatSessionId: number,
+  chatSessionId: string,
   newName: string
 ) {
   const response = await fetch(`/api/chat/rename-chat-session`, {
@@ -276,7 +269,7 @@ export async function renameChatSession(
   return response;
 }
 
-export async function deleteChatSession(chatSessionId: number) {
+export async function deleteChatSession(chatSessionId: string) {
   const response = await fetch(
     `/api/chat/delete-chat-session/${chatSessionId}`,
     {
@@ -435,7 +428,7 @@ export function processRawChatHistory(
             citations: messageInfo?.citations || {},
           }
         : {}),
-      toolCalls: messageInfo.tool_calls,
+      toolCall: messageInfo.tool_call,
       parentMessageId: messageInfo.parent_message,
       childrenMessageIds: [],
       latestChildMessageId: messageInfo.latest_child_message,
@@ -591,7 +584,7 @@ const PARAMS_TO_SKIP = [
 
 export function buildChatUrl(
   existingSearchParams: ReadonlyURLSearchParams,
-  chatSessionId: number | null,
+  chatSessionId: string | null,
   personaId: number | null,
   search?: boolean
 ) {
@@ -648,9 +641,11 @@ export async function useScrollonStream({
   endDivRef,
   distance,
   debounceNumber,
+  waitForScrollRef,
 }: {
   chatState: ChatState;
   scrollableDivRef: RefObject<HTMLDivElement>;
+  waitForScrollRef: RefObject<boolean>;
   scrollDist: MutableRefObject<number>;
   endDivRef: RefObject<HTMLDivElement>;
   distance: number;
@@ -664,7 +659,7 @@ export async function useScrollonStream({
 
   useEffect(() => {
     if (chatState != "input" && scrollableDivRef && scrollableDivRef.current) {
-      let newHeight: number = scrollableDivRef.current?.scrollTop!;
+      const newHeight: number = scrollableDivRef.current?.scrollTop!;
       const heightDifference = newHeight - previousScroll.current;
       previousScroll.current = newHeight;
 
@@ -729,5 +724,5 @@ export async function useScrollonStream({
         });
       }
     }
-  }, [chatState]);
+  }, [chatState, distance, scrollDist, scrollableDivRef]);
 }

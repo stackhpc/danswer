@@ -1,3 +1,5 @@
+from datetime import datetime
+from datetime import timezone
 from typing import cast
 
 from sqlalchemy import and_
@@ -246,7 +248,7 @@ def create_initial_default_connector(db_session: Session) -> None:
             logger.warning(
                 "Default connector does not have expected values. Updating to proper state."
             )
-            # Ensure default connector has correct valuesg
+            # Ensure default connector has correct values
             default_connector.source = DocumentSource.INGESTION_API
             default_connector.input_type = InputType.LOAD_STATE
             default_connector.refresh_freq = None
@@ -267,4 +269,16 @@ def create_initial_default_connector(db_session: Session) -> None:
         prune_freq=None,
     )
     db_session.add(connector)
+    db_session.commit()
+
+
+def mark_ccpair_as_pruned(cc_pair_id: int, db_session: Session) -> None:
+    stmt = select(ConnectorCredentialPair).where(
+        ConnectorCredentialPair.id == cc_pair_id
+    )
+    cc_pair = db_session.scalar(stmt)
+    if cc_pair is None:
+        raise ValueError(f"No cc_pair with ID: {cc_pair_id}")
+
+    cc_pair.last_pruned = datetime.now(timezone.utc)
     db_session.commit()

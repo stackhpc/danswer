@@ -6,27 +6,29 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Button, Divider, Text } from "@tremor/react";
-import Link from "next/link";
-import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
-import { MagnifyingGlass } from "@phosphor-icons/react";
-import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-} from "@tremor/react";
+} from "@/components/ui/table";
+
+import Link from "next/link";
+import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
+import { MagnifyingGlass } from "@phosphor-icons/react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteStandardAnswer } from "./lib";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
-import { SelectedBubble } from "@/components/search/filtering/Filters";
 import { PageSelector } from "@/components/PageSelector";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
+import Text from "@/components/ui/text";
+import { TableHeader } from "@/components/ui/table";
 
 const NUM_RESULTS_PER_PAGE = 10;
 
@@ -289,16 +291,14 @@ const StandardAnswersTable = ({
         </div>
       </div>
       <div className="mx-auto">
-        <Table>
-          <TableHead>
+        <Table className="w-full flex items-stretch">
+          <TableHeader>
             <TableRow>
               {columns.map((column) => (
-                <TableHeaderCell key={column.key}>
-                  {column.name}
-                </TableHeaderCell>
+                <TableHead key={column.key}>{column.name}</TableHead>
               ))}
             </TableRow>
-          </TableHead>
+          </TableHeader>
 
           <TableBody>
             {paginatedStandardAnswers.length > 0 ? (
@@ -403,12 +403,12 @@ const Main = () => {
       <div className="mb-2"></div>
 
       <Link className="flex mb-3 mt-2 w-fit" href="/admin/standard-answer/new">
-        <Button className="my-auto" color="green" size="xs">
+        <Button className="my-auto" variant="submit" size="sm">
           New Standard Answer
         </Button>
       </Link>
 
-      <Divider />
+      <Separator />
 
       <div>
         <StandardAnswersTable

@@ -1,4 +1,4 @@
-import { FiCheck, FiChevronDown, FiX, FiXCircle } from "react-icons/fi";
+import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 
 interface Option {
@@ -41,7 +41,8 @@ export function FilterDropdown({
               flex-col 
               ${dropdownWidth || width}
               max-h-96 
-              overflow-y-scroll 
+              overflow-y-scroll
+              overscroll-contain
               `}
           >
             {options.map((option, ind) => {

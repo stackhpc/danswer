@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import { FeedbackType } from "../types";
-import { FiThumbsDown, FiThumbsUp } from "react-icons/fi";
-import { ModalWrapper } from "@/components/modals/ModalWrapper";
-import {
-  DislikeFeedbackIcon,
-  FilledLikeIcon,
-  LikeFeedbackIcon,
-} from "@/components/icons/icons";
+import { Modal } from "@/components/Modal";
+import { FilledLikeIcon } from "@/components/icons/icons";
 
 const predefinedPositiveFeedbackOptions =
   process.env.NEXT_PUBLIC_POSITIVE_PREDEFINED_FEEDBACK_OPTIONS?.split(",") ||
@@ -54,7 +49,7 @@ export const FeedbackModal = ({
       : predefinedNegativeFeedbackOptions;
 
   return (
-    <ModalWrapper onClose={onClose} modalClassName="max-w-3xl">
+    <Modal onOutsideClick={onClose} width="max-w-3xl">
       <>
         <h2 className="text-2xl text-emphasis font-bold mb-4 flex">
           <div className="mr-1 my-auto">
@@ -117,6 +112,6 @@ export const FeedbackModal = ({
           </button>
         </div>
       </>
-    </ModalWrapper>
+    </Modal>
   );
 };

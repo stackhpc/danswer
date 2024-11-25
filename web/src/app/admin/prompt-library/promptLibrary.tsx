@@ -8,15 +8,15 @@ import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-} from "@tremor/react";
+} from "@/components/ui/table";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import { InputPrompt } from "./interfaces";
-import { Modal } from "@/components/Modal";
+import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { TableHeader } from "@/components/ui/table";
 
 const CategoryBubble = ({
   name,
@@ -120,6 +120,7 @@ export const PromptLibraryTable = ({
       setPopup({ message: "Failed to delete input prompt", type: "error" });
     }
     refresh();
+    setConfirmDeletionId(null);
   };
 
   const handleStatusSelect = (status: string) => {
@@ -138,35 +139,16 @@ export const PromptLibraryTable = ({
   return (
     <div className="justify-center py-2">
       {confirmDeletionId != null && (
-        <Modal
-          onOutsideClick={() => setConfirmDeletionId(null)}
-          className="max-w-sm"
-        >
-          <>
-            <p className="text-lg mb-2">
-              Are you sure you want to delete this prompt? You will not be able
-              to recover this prompt
-            </p>
-            <div className="mt-6 flex justify-between">
-              <button
-                className="rounded py-1.5 px-2 bg-background-800 text-text-200"
-                onClick={async () => {
-                  await handleDelete(confirmDeletionId);
-                  setConfirmDeletionId(null);
-                }}
-              >
-                Yes
-              </button>
-              <button
-                onClick={() => setConfirmDeletionId(null)}
-                className="rounded py-1.5 px-2 bg-background-150 text-text-800"
-              >
-                {" "}
-                No
-              </button>
-            </div>
-          </>
-        </Modal>
+        <DeleteEntityModal
+          onClose={() => setConfirmDeletionId(null)}
+          onSubmit={() => handleDelete(confirmDeletionId)}
+          entityType="prompt"
+          entityName={
+            paginatedPromptLibrary.find(
+              (prompt) => prompt.id === confirmDeletionId
+            )?.prompt ?? ""
+          }
+        />
       )}
 
       <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent">
@@ -192,7 +174,7 @@ export const PromptLibraryTable = ({
           icon={<FiTag size={16} />}
           defaultDisplay="All Statuses"
         />
-        <div className="flex flex-wrap pb-4 mt-3">
+        <div className="flex flex-col items-stretch w-full flex-wrap pb-4 mt-3">
           {selectedStatus.map((status) => (
             <CategoryBubble
               key={status}
@@ -204,15 +186,13 @@ export const PromptLibraryTable = ({
       </div>
       <div className="mx-auto overflow-x-auto">
         <Table>
-          <TableHead>
+          <TableHeader>
             <TableRow>
               {columns.map((column) => (
-                <TableHeaderCell key={column.key}>
-                  {column.name}
-                </TableHeaderCell>
+                <TableHead key={column.key}>{column.name}</TableHead>
               ))}
             </TableRow>
-          </TableHead>
+          </TableHeader>
           <TableBody>
             {paginatedPromptLibrary.length > 0 ? (
               paginatedPromptLibrary

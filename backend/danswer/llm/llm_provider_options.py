@@ -16,10 +16,13 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     api_base_required: bool
     api_version_required: bool
     custom_config_keys: list[CustomConfigKey] | None = None
-
     llm_names: list[str]
     default_model: str | None = None
     default_fast_model: str | None = None
+    # set for providers like Azure, which require a deployment name.
+    deployment_name_required: bool = False
+    # set for providers like Azure, which support a single model per deployment.
+    single_model_supported: bool = False
 
 
 OPENAI_PROVIDER_NAME = "openai"
@@ -58,6 +61,7 @@ BEDROCK_MODEL_NAMES = [
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
     "claude-instant-1",
+    "anthropic/claude-3-5-sonnet-20241022",
 ]
 ANTHROPIC_PROVIDER_NAME = "anthropic"
 ANTHROPIC_MODEL_NAMES = [
@@ -97,8 +101,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             llm_names=fetch_models_for_provider(ANTHROPIC_PROVIDER_NAME),
-            default_model="claude-3-5-sonnet-20240620",
-            default_fast_model="claude-3-5-sonnet-20240620",
+            default_model="claude-3-5-sonnet-20241022",
+            default_fast_model="claude-3-5-sonnet-20241022",
         ),
         WellKnownLLMProviderDescriptor(
             name=AZURE_PROVIDER_NAME,
@@ -108,6 +112,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=True,
             custom_config_keys=[],
             llm_names=fetch_models_for_provider(AZURE_PROVIDER_NAME),
+            deployment_name_required=True,
+            single_model_supported=True,
         ),
         WellKnownLLMProviderDescriptor(
             name=BEDROCK_PROVIDER_NAME,
@@ -130,8 +136,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
-            default_model="anthropic.claude-3-5-sonnet-20240620-v1:0",
-            default_fast_model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+            default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+            default_fast_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
         ),
     ]
 

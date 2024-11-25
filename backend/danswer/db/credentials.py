@@ -10,10 +10,8 @@ from sqlalchemy.sql.expression import or_
 
 from danswer.auth.schemas import UserRole
 from danswer.configs.constants import DocumentSource
-from danswer.connectors.gmail.constants import (
-    GMAIL_DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
-)
-from danswer.connectors.google_drive.constants import (
+from danswer.configs.constants import KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY
+from danswer.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
 from danswer.db.models import ConnectorCredentialPair
@@ -39,6 +37,8 @@ CREDENTIAL_PERMISSIONS_TO_IGNORE = {
     DocumentSource.WIKIPEDIA,
     DocumentSource.MEDIAWIKI,
 }
+
+PUBLIC_CREDENTIAL_ID = 0
 
 
 def _add_user_filters(
@@ -242,7 +242,6 @@ def create_credential(
     )
     db_session.add(credential)
     db_session.flush()  # This ensures the credential gets an ID
-
     _relate_credential_to_user_groups__no_commit(
         db_session=db_session,
         credential_id=credential.id,
@@ -385,12 +384,11 @@ def delete_credential(
 
 
 def create_initial_public_credential(db_session: Session) -> None:
-    public_cred_id = 0
     error_msg = (
         "DB is not in a valid initial state."
         "There must exist an empty public credential for data connectors that do not require additional Auth."
     )
-    first_credential = fetch_credential_by_id(public_cred_id, None, db_session)
+    first_credential = fetch_credential_by_id(PUBLIC_CREDENTIAL_ID, None, db_session)
 
     if first_credential is not None:
         if first_credential.credential_json != {} or first_credential.user is not None:
@@ -398,11 +396,29 @@ def create_initial_public_credential(db_session: Session) -> None:
         return
 
     credential = Credential(
-        id=public_cred_id,
+        id=PUBLIC_CREDENTIAL_ID,
         credential_json={},
         user_id=None,
     )
     db_session.add(credential)
+    db_session.commit()
+
+
+def cleanup_gmail_credentials(db_session: Session) -> None:
+    gmail_credentials = fetch_credentials_by_source(
+        db_session=db_session, user=None, document_source=DocumentSource.GMAIL
+    )
+    for credential in gmail_credentials:
+        db_session.delete(credential)
+    db_session.commit()
+
+
+def cleanup_google_drive_credentials(db_session: Session) -> None:
+    google_drive_credentials = fetch_credentials_by_source(
+        db_session=db_session, user=None, document_source=DocumentSource.GOOGLE_DRIVE
+    )
+    for credential in google_drive_credentials:
+        db_session.delete(credential)
     db_session.commit()
 
 
@@ -411,9 +427,7 @@ def delete_gmail_service_account_credentials(
 ) -> None:
     credentials = fetch_credentials(db_session=db_session, user=user)
     for credential in credentials:
-        if credential.credential_json.get(
-            GMAIL_DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
-        ):
+        if credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY):
             db_session.delete(credential)
 
     db_session.commit()
@@ -424,7 +438,7 @@ def delete_google_drive_service_account_credentials(
 ) -> None:
     credentials = fetch_credentials(db_session=db_session, user=user)
     for credential in credentials:
-        if credential.credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY):
+        if credential.credential_json.get(KV_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY):
             db_session.delete(credential)
 
     db_session.commit()

@@ -62,7 +62,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    # needs: helm_chart_version_check
+    needs: helm_chart_version_check
     # if: ${{ needs.helm_chart_version_check.outputs.version_changed == 'true' }}
     steps:
       - name: Checkout

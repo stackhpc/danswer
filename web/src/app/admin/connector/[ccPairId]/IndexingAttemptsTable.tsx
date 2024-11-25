@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Table,
   TableHead,
   TableRow,
-  TableHeaderCell,
   TableBody,
   TableCell,
-  Text,
-} from "@tremor/react";
-import { CCPairFullInfo } from "./types";
+  TableHeader,
+} from "@/components/ui/table";
+import Text from "@/components/ui/text";
+import { Callout } from "@/components/ui/callout";
+import { CCPairFullInfo, PaginatedIndexAttempts } from "./types";
 import { IndexAttemptStatus } from "@/components/Status";
-import { useState } from "react";
 import { PageSelector } from "@/components/PageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { buildCCPairInfoUrl } from "./lib";
@@ -22,9 +22,14 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { InfoIcon, SearchIcon } from "@/components/icons/icons";
 import Link from "next/link";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { PaginatedIndexAttempts } from "./types";
 import { useRouter } from "next/navigation";
-import { Tooltip } from "@/components/tooltip/Tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { FiInfo } from "react-icons/fi";
 
 // This is the number of index attempts to display per page
 const NUM_IN_PAGE = 8;
@@ -61,47 +66,61 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
   // we use it to avoid duplicate requests
   const ongoingRequestsRef = useRef<Set<number>>(new Set());
 
-  const batchRetrievalUrlBuilder = (batchNum: number) =>
-    `${buildCCPairInfoUrl(ccPair.id)}/index-attempts?page=${batchNum}&page_size=${BATCH_SIZE * NUM_IN_PAGE}`;
+  const batchRetrievalUrlBuilder = useCallback(
+    (batchNum: number) => {
+      return `${buildCCPairInfoUrl(
+        ccPair.id
+      )}/index-attempts?page=${batchNum}&page_size=${BATCH_SIZE * NUM_IN_PAGE}`;
+    },
+    [ccPair.id]
+  );
 
   // This fetches and caches the data for a given batch number
-  const fetchBatchData = async (batchNum: number) => {
-    if (ongoingRequestsRef.current.has(batchNum)) return;
-    ongoingRequestsRef.current.add(batchNum);
+  const fetchBatchData = useCallback(
+    async (batchNum: number) => {
+      if (ongoingRequestsRef.current.has(batchNum)) return;
+      ongoingRequestsRef.current.add(batchNum);
 
-    try {
-      const response = await fetch(batchRetrievalUrlBuilder(batchNum + 1));
-      if (!response.ok) {
-        throw new Error("Failed to fetch data");
-      }
-      const data = await response.json();
+      try {
+        const response = await fetch(batchRetrievalUrlBuilder(batchNum + 1));
+        if (!response.ok) {
+          throw new Error("Failed to fetch data");
+        }
+        const data = await response.json();
 
-      const newBatchData: PaginatedIndexAttempts[] = [];
-      for (let i = 0; i < BATCH_SIZE; i++) {
-        const startIndex = i * NUM_IN_PAGE;
-        const endIndex = startIndex + NUM_IN_PAGE;
-        const pageIndexAttempts = data.index_attempts.slice(
-          startIndex,
-          endIndex
+        const newBatchData: PaginatedIndexAttempts[] = [];
+        for (let i = 0; i < BATCH_SIZE; i++) {
+          const startIndex = i * NUM_IN_PAGE;
+          const endIndex = startIndex + NUM_IN_PAGE;
+          const pageIndexAttempts = data.index_attempts.slice(
+            startIndex,
+            endIndex
+          );
+          newBatchData.push({
+            ...data,
+            index_attempts: pageIndexAttempts,
+          });
+        }
+
+        setCachedBatches((prev) => ({
+          ...prev,
+          [batchNum]: newBatchData,
+        }));
+      } catch (error) {
+        setCurrentPageError(
+          error instanceof Error ? error : new Error("An error occurred")
         );
-        newBatchData.push({
-          ...data,
-          index_attempts: pageIndexAttempts,
-        });
+      } finally {
+        ongoingRequestsRef.current.delete(batchNum);
       }
-
-      setCachedBatches((prev) => ({
-        ...prev,
-        [batchNum]: newBatchData,
-      }));
-    } catch (error) {
-      setCurrentPageError(
-        error instanceof Error ? error : new Error("An error occurred")
-      );
-    } finally {
-      ongoingRequestsRef.current.delete(batchNum);
-    }
-  };
+    },
+    [
+      ongoingRequestsRef,
+      setCachedBatches,
+      setCurrentPageError,
+      batchRetrievalUrlBuilder,
+    ]
+  );
 
   // This fetches and caches the data for the current batch and the next and previous batches
   useEffect(() => {
@@ -114,9 +133,9 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
       setIsCurrentPageLoading(false);
     }
 
-    const nextBatchNum = Math.min(
-      batchNum + 1,
-      Math.ceil(totalPages / BATCH_SIZE) - 1
+    const nextBatchNum = Math.max(
+      Math.min(batchNum + 1, Math.ceil(totalPages / BATCH_SIZE) - 1),
+      0
     );
     if (!cachedBatches[nextBatchNum]) {
       fetchBatchData(nextBatchNum);
@@ -131,7 +150,7 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
     if (!cachedBatches[0]) {
       fetchBatchData(0);
     }
-  }, [ccPair.id, page, cachedBatches, totalPages]);
+  }, [ccPair.id, page, cachedBatches, totalPages, fetchBatchData]);
 
   // This updates the data on the current page
   useEffect(() => {
@@ -146,10 +165,19 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
     }
   }, [page, cachedBatches]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const batchNum = Math.floor((page - 1) / BATCH_SIZE);
+      fetchBatchData(batchNum); // Re-fetch the current batch data
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, [page, fetchBatchData]); // Dependencies to ensure correct batch is fetched
+
   // This updates the page number and manages the URL
   const updatePage = (newPage: number) => {
     setPage(newPage);
-    router.push(`/admin/connector/${ccPair.id}?page=${newPage}`, {
+    router.replace(`/admin/connector/${ccPair.id}?page=${newPage}`, {
       scroll: false,
     });
     window.scrollTo({
@@ -172,6 +200,25 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
     );
   }
 
+  // if no indexing attempts have been scheduled yet, let the user know why
+  if (
+    Object.keys(cachedBatches).length === 0 ||
+    Object.values(cachedBatches).every((batch) =>
+      batch.every((page) => page.index_attempts.length === 0)
+    )
+  ) {
+    return (
+      <Callout
+        className="mt-4"
+        title="No indexing attempts scheduled yet"
+        type="notice"
+      >
+        Index attempts are scheduled in the background, and may take some time
+        to appear. Try refreshing the page in ~30 seconds!
+      </Callout>
+    );
+  }
+
   // This is the index attempt that the user wants to view the trace for
   const indexAttemptToDisplayTraceFor = currentPageData?.index_attempts?.find(
     (indexAttempt) => indexAttempt.id === indexAttemptTracePopupId
@@ -188,27 +235,32 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
         )}
 
       <Table>
-        <TableHead>
+        <TableHeader>
           <TableRow>
-            <TableHeaderCell>Time Started</TableHeaderCell>
-            <TableHeaderCell>Status</TableHeaderCell>
-            <TableHeaderCell>New Doc Cnt</TableHeaderCell>
-            <TableHeaderCell>
+            <TableHead>Time Started</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>New Doc Cnt</TableHead>
+            <TableHead>
               <div className="w-fit">
-                <Tooltip
-                  width="max-w-sm"
-                  content="Total number of documents replaced in the index during this indexing attempt"
-                >
-                  <span className="cursor-help flex items-center">
-                    Total Doc Cnt
-                    <InfoIcon className="ml-1 w-4 h-4" />
-                  </span>
-                </Tooltip>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help flex items-center">
+                        Total Doc Cnt
+                        <InfoIcon className="ml-1 w-4 h-4" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Total number of documents replaced in the index during
+                      this indexing attempt
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
-            </TableHeaderCell>
-            <TableHeaderCell>Error Message</TableHeaderCell>
+            </TableHead>
+            <TableHead>Error Message</TableHead>
           </TableRow>
-        </TableHead>
+        </TableHeader>
         <TableBody>
           {currentPageData.index_attempts.map((indexAttempt) => {
             const docsPerMinute =
@@ -223,7 +275,6 @@ export function IndexingAttemptsTable({ ccPair }: { ccPair: CCPairFullInfo }) {
                 <TableCell>
                   <IndexAttemptStatus
                     status={indexAttempt.status || "not_started"}
-                    size="xs"
                   />
                   {docsPerMinute ? (
                     <div className="text-xs mt-1">

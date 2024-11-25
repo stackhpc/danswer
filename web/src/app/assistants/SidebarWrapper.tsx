@@ -6,7 +6,14 @@ import { Folder } from "@/app/chat/folders/interfaces";
 import { User } from "@/lib/types";
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import { ReactNode, useContext, useEffect, useRef, useState } from "react";
+import {
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useSidebarVisibility } from "@/components/chat_search/hooks";
 import FunctionalHeader from "@/components/chat_search/Header";
 import { useRouter } from "next/navigation";
@@ -19,14 +26,9 @@ interface SidebarWrapperProps<T extends object> {
   folders?: Folder[];
   initiallyToggled: boolean;
   openedFolders?: { [key: number]: boolean };
-  content: (props: T) => ReactNode;
-  headerProps: {
-    page: pageType;
-    user: User | null;
-  };
-  contentProps: T;
   page: pageType;
   size?: "sm" | "lg";
+  children: ReactNode;
 }
 
 export default function SidebarWrapper<T extends object>({
@@ -35,10 +37,8 @@ export default function SidebarWrapper<T extends object>({
   folders,
   openedFolders,
   page,
-  headerProps,
-  contentProps,
-  content,
   size = "sm",
+  children,
 }: SidebarWrapperProps<T>) {
   const [toggledSidebar, setToggledSidebar] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
@@ -54,7 +54,7 @@ export default function SidebarWrapper<T extends object>({
     }, 200);
   };
 
-  const toggleSidebar = () => {
+  const toggleSidebar = useCallback(() => {
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!toggledSidebar).toLocaleLowerCase()
@@ -63,7 +63,7 @@ export default function SidebarWrapper<T extends object>({
         path: "/",
       };
     setToggledSidebar((toggledSidebar) => !toggledSidebar);
-  };
+  }, [toggledSidebar]);
 
   const sidebarElementRef = useRef<HTMLDivElement>(null);
 
@@ -137,7 +137,6 @@ export default function SidebarWrapper<T extends object>({
           sidebarToggled={toggledSidebar}
           toggleSidebar={toggleSidebar}
           page="assistants"
-          user={headerProps.user}
         />
         <div className="w-full flex">
           <div
@@ -154,13 +153,15 @@ export default function SidebarWrapper<T extends object>({
           />
 
           <div
-            className={`mt-4 w-full ${size == "lg" ? "max-w-4xl" : "max-w-3xl"} mx-auto`}
+            className={`mt-4 w-full ${
+              size == "lg" ? "max-w-4xl" : "max-w-3xl"
+            } mx-auto`}
           >
-            {content(contentProps)}
+            {children}
           </div>
         </div>
       </div>
-      <FixedLogo />
+      <FixedLogo backgroundToggled={toggledSidebar || showDocSidebar} />
     </div>
   );
 }

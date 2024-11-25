@@ -56,6 +56,21 @@ class DocumentMetadata:
 
 
 @dataclass
+class VespaDocumentFields:
+    """
+    Specifies fields in Vespa for a document.  Fields set to None will be ignored.
+    Perhaps we should name this in an implementation agnostic fashion, but it's more
+    understandable like this for now.
+    """
+
+    # all other fields except these 4 will always be left alone by the update request
+    access: DocumentAccess | None = None
+    document_sets: set[str] | None = None
+    boost: float | None = None
+    hidden: bool | None = None
+
+
+@dataclass
 class UpdateRequest:
     """
     For all document_ids, update the allowed_users and the boost to the new values
@@ -112,6 +127,17 @@ class Verifiable(abc.ABC):
         """
         raise NotImplementedError
 
+    @staticmethod
+    @abc.abstractmethod
+    def register_multitenant_indices(
+        indices: list[str],
+        embedding_dims: list[int],
+    ) -> None:
+        """
+        Register multitenant indices with the document index.
+        """
+        raise NotImplementedError
+
 
 class Indexable(abc.ABC):
     """
@@ -157,7 +183,7 @@ class Deletable(abc.ABC):
     """
 
     @abc.abstractmethod
-    def delete_single(self, doc_id: str) -> None:
+    def delete_single(self, doc_id: str) -> int:
         """
         Given a single document id, hard delete it from the document index
 
@@ -188,11 +214,9 @@ class Updatable(abc.ABC):
     """
 
     @abc.abstractmethod
-    def update_single(self, update_request: UpdateRequest) -> None:
+    def update_single(self, doc_id: str, fields: VespaDocumentFields) -> int:
         """
-        Updates some set of chunks for a document. The document and fields to update
-        are specified in the update request. Each update request in the list applies
-        its changes to a list of document ids.
+        Updates all chunks for a document with the specified fields.
         None values mean that the field does not need an update.
 
         The rationale for a single update function is that it allows retries and parallelism
@@ -200,14 +224,10 @@ class Updatable(abc.ABC):
         us to individually handle error conditions per document.
 
         Parameters:
-        - update_request: for a list of document ids in the update request, apply the same updates
-                to all of the documents with those ids.
+        - fields: the fields to update in the document. Any field set to None will not be changed.
 
         Return:
-        - an HTTPStatus code. The code can used to decide whether to fail immediately,
-        retry, etc.  Although this method likely hits an HTTP API behind the
-        scenes, the usage of HTTPStatus is a convenience and the interface is not
-        actually HTTP specific.
+            None
         """
         raise NotImplementedError
 

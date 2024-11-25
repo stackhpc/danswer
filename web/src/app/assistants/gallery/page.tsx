@@ -4,14 +4,16 @@ import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
 import WrappedAssistantsGallery from "./WrappedAssistantsGallery";
+import { AssistantsProvider } from "@/components/context/AssistantsContext";
+import { cookies } from "next/headers";
 
-export default async function GalleryPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string };
+export default async function GalleryPage(props: {
+  searchParams: Promise<{ [key: string]: string }>;
 }) {
   noStore();
 
+  const searchParams = await props.searchParams;
+  const requestCookies = await cookies();
   const data = await fetchChatData(searchParams);
 
   if ("redirect" in data) {
@@ -21,16 +23,17 @@ export default async function GalleryPage({
   const {
     user,
     chatSessions,
-    assistants,
     folders,
     openedFolders,
-    shouldShowWelcomeModal,
     toggleSidebar,
+    shouldShowWelcomeModal,
   } = data;
 
   return (
     <>
-      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+      {shouldShowWelcomeModal && (
+        <WelcomeModal user={user} requestCookies={requestCookies} />
+      )}
 
       <InstantSSRAutoRefresh />
 
@@ -39,8 +42,6 @@ export default async function GalleryPage({
         chatSessions={chatSessions}
         folders={folders}
         openedFolders={openedFolders}
-        user={user}
-        assistants={assistants}
       />
     </>
   );

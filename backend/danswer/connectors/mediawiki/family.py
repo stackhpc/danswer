@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 import functools
 import itertools
+import tempfile
 from typing import Any
 from unittest import mock
 from urllib.parse import urlparse
@@ -17,6 +18,8 @@ from danswer.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+pywikibot.config.base_dir = tempfile.TemporaryDirectory().name
 
 
 @mock.patch.object(
@@ -45,8 +48,7 @@ class FamilyFileGeneratorInMemory(generate_family_file.FamilyFileGenerator):
 
         if any(x not in generate_family_file.NAME_CHARACTERS for x in name):
             raise ValueError(
-                'ERROR: Name of family "{}" must be ASCII letters and digits [a-zA-Z0-9]',
-                name,
+                f'ERROR: Name of family "{name}" must be ASCII letters and digits [a-zA-Z0-9]',
             )
 
         if isinstance(dointerwiki, bool):

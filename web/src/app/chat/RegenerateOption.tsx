@@ -14,9 +14,9 @@ import { destructureValue, getFinalLLM, structureValue } from "@/lib/llm/utils";
 import { useState } from "react";
 import { Hoverable } from "@/components/Hoverable";
 import { Popover } from "@/components/popover/Popover";
-import { FiStar } from "react-icons/fi";
 import { StarFeedback } from "@/components/icons/icons";
 import { IconType } from "react-icons";
+import { FiRefreshCw } from "react-icons/fi";
 
 export function RegenerateDropdown({
   options,
@@ -25,6 +25,7 @@ export function RegenerateDropdown({
   side,
   maxHeight,
   alternate,
+  onDropdownVisibleChange,
 }: {
   alternate?: string;
   options: StringOrNumberOption[];
@@ -33,8 +34,14 @@ export function RegenerateDropdown({
   includeDefault?: boolean;
   side?: "top" | "right" | "bottom" | "left";
   maxHeight?: string;
+  onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const toggleDropdownVisible = (isVisible: boolean) => {
+    setIsOpen(isVisible);
+    onDropdownVisibleChange(isVisible);
+  };
 
   const Dropdown = (
     <div
@@ -62,7 +69,7 @@ export function RegenerateDropdown({
                 py-1.5 
                 "
       >
-        Pick a model
+        Regenerate with
       </p>
       {options.map((option, ind) => {
         const isSelected = option.value === selected;
@@ -82,15 +89,15 @@ export function RegenerateDropdown({
   return (
     <Popover
       open={isOpen}
-      onOpenChange={(open) => setIsOpen(open)}
+      onOpenChange={toggleDropdownVisible}
       content={
-        <div onClick={() => setIsOpen(!isOpen)}>
+        <div onClick={() => toggleDropdownVisible(!isOpen)}>
           {!alternate ? (
-            <Hoverable size={16} icon={StarFeedback as IconType} />
+            <Hoverable size={16} icon={FiRefreshCw as IconType} />
           ) : (
             <Hoverable
               size={16}
-              icon={StarFeedback as IconType}
+              icon={FiRefreshCw as IconType}
               hoverText={getDisplayNameForModel(alternate)}
             />
           )}
@@ -110,11 +117,13 @@ export default function RegenerateOption({
   regenerate,
   overriddenModel,
   onHoverChange,
+  onDropdownVisibleChange,
 }: {
   selectedAssistant: Persona;
   regenerate: (modelOverRide: LlmOverride) => Promise<void>;
   overriddenModel?: string;
   onHoverChange: (isHovered: boolean) => void;
+  onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
   const llmOverrideManager = useLlmOverride();
 
@@ -165,6 +174,7 @@ export default function RegenerateOption({
       onMouseLeave={() => onHoverChange(false)}
     >
       <RegenerateDropdown
+        onDropdownVisibleChange={onDropdownVisibleChange}
         alternate={overriddenModel}
         options={llmOptions}
         selected={currentModelName}

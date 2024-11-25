@@ -5,16 +5,14 @@ import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModalWrap
 import { ChatProvider } from "@/components/context/ChatContext";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import WrappedChat from "./WrappedChat";
-import { ProviderContextProvider } from "@/components/chat_search/ProviderContext";
-import { orderAssistantsForUser } from "@/lib/assistants/utils";
+import { cookies } from "next/headers";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string };
+export default async function Page(props: {
+  searchParams: Promise<{ [key: string]: string }>;
 }) {
+  const searchParams = await props.searchParams;
   noStore();
-
+  const requestCookies = await cookies();
   const data = await fetchChatData(searchParams);
 
   if ("redirect" in data) {
@@ -26,7 +24,6 @@ export default async function Page({
     chatSessions,
     availableSources,
     documentSets,
-    assistants,
     tags,
     llmProviders,
     folders,
@@ -40,14 +37,14 @@ export default async function Page({
   return (
     <>
       <InstantSSRAutoRefresh />
-      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
-
+      {shouldShowWelcomeModal && (
+        <WelcomeModal user={user} requestCookies={requestCookies} />
+      )}
       <ChatProvider
         value={{
           chatSessions,
           availableSources,
           availableDocumentSets: documentSets,
-          availableAssistants: assistants,
           availableTags: tags,
           llmProviders,
           folders,

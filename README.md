@@ -1,4 +1,5 @@
 <!-- DANSWER_METADATA={"link": "https://github.com/danswer-ai/danswer/blob/main/README.md"} -->
+<a name="readme-top"></a>
 
 <h2 align="center">
 <a href="https://www.danswer.ai/"> <img width="50%" src="https://github.com/danswer-owners/danswer/blob/1fabd9372d66cd54238847197c33f091a724803b/DanswerWithName.png?raw=true)" /></a>
@@ -68,13 +69,13 @@ We also have built-in support for deployment on Kubernetes. Files for that can b
 
 ## 🚧 Roadmap
 * Chat/Prompt sharing with specific teammates and user groups.
-* Multi-Model model support, chat with images, video etc.
+* Multimodal model support, chat with images, video etc.
 * Choosing between LLMs and parameters during chat session.
 * Tool calling and agent configurations options.
 * Organizational understanding and ability to locate and suggest experts from your team.
 
 
-## Other Noteable Benefits of Danswer
+## Other Notable Benefits of Danswer
 * User Authentication with document level access management.
 * Best in class Hybrid Search across all sources (BM-25 + prefix aware embedding models).
 * Admin Dashboard to configure connectors, document-sets, access, etc.
@@ -127,3 +128,19 @@ To try the Danswer Enterprise Edition:
 
 ## 💡 Contributing
 Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details.
+
+## ⭐Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=danswer-ai/danswer&type=Date)](https://star-history.com/#danswer-ai/danswer&Date)
+
+## ✨Contributors
+
+<a href="https://github.com/aryn-ai/sycamore/graphs/contributors">
+  <img alt="contributors" src="https://contrib.rocks/image?repo=danswer-ai/danswer"/>
+</a>
+
+<p align="right" style="font-size: 14px; color: #555; margin-top: 20px;">
+    <a href="#readme-top" style="text-decoration: none; color: #007bff; font-weight: bold;">
+        ↑ Back to Top ↑
+    </a>
+</p>

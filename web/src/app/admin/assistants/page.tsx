@@ -1,34 +1,13 @@
 import { PersonasTable } from "./PersonaTable";
 import { FiPlusSquare } from "react-icons/fi";
 import Link from "next/link";
-import { Divider, Text, Title } from "@tremor/react";
-import { fetchSS } from "@/lib/utilsSS";
-import { ErrorCallout } from "@/components/ErrorCallout";
-import { Persona } from "./interfaces";
-import { AssistantsIcon, RobotIcon } from "@/components/icons/icons";
+import Text from "@/components/ui/text";
+import Title from "@/components/ui/title";
+import { Separator } from "@/components/ui/separator";
+import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
 
 export default async function Page() {
-  const allPersonaResponse = await fetchSS("/admin/persona");
-  const editablePersonaResponse = await fetchSS(
-    "/admin/persona?get_editable=true"
-  );
-
-  if (!allPersonaResponse.ok || !editablePersonaResponse.ok) {
-    return (
-      <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${
-          (await allPersonaResponse.text()) ||
-          (await editablePersonaResponse.text())
-        }`}
-      />
-    );
-  }
-
-  const allPersonas = (await allPersonaResponse.json()) as Persona[];
-  const editablePersonas = (await editablePersonaResponse.json()) as Persona[];
-
   return (
     <div className="mx-auto container">
       <AdminPageTitle icon={<AssistantsIcon size={32} />} title="Assistants" />
@@ -48,7 +27,7 @@ export default async function Page() {
       </div>
 
       <div>
-        <Divider />
+        <Separator />
 
         <Title>Create an Assistant</Title>
         <Link
@@ -61,13 +40,10 @@ export default async function Page() {
           </div>
         </Link>
 
-        <Divider />
+        <Separator />
 
         <Title>Existing Assistants</Title>
-        <PersonasTable
-          allPersonas={allPersonas}
-          editablePersonas={editablePersonas}
-        />
+        <PersonasTable />
       </div>
     </div>
   );

@@ -3,7 +3,8 @@
 import { generateRandomIconShape, createSVG } from "@/lib/assistantIconUtils";
 
 import { CCPairBasicInfo, DocumentSet, User } from "@/lib/types";
-import { Button, Divider, Italic } from "@tremor/react";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import {
   ArrayHelpers,
@@ -26,7 +27,7 @@ import { getDisplayNameForModel } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { Option } from "@/components/Dropdown";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
-import { checkLLMSupportsImageOutput, destructureValue } from "@/lib/llm/utils";
+import { checkLLMSupportsImageInput, destructureValue } from "@/lib/llm/utils";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { checkUserIsNoAuthUser } from "@/lib/user";
 
@@ -35,22 +36,17 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@radix-ui/react-tooltip";
+} from "@/components/ui/tooltip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FiInfo, FiPlus, FiX } from "react-icons/fi";
+import { FiInfo, FiX } from "react-icons/fi";
 import * as Yup from "yup";
 import { FullLLMProvider } from "../configuration/llm/interfaces";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { Persona, StarterMessage } from "./interfaces";
-import {
-  buildFinalPrompt,
-  createPersona,
-  providersContainImageGeneratingSupport,
-  updatePersona,
-} from "./lib";
+import { createPersona, updatePersona } from "./lib";
 import { Popover } from "@/components/popover/Popover";
 import {
   CameraIcon,
@@ -61,6 +57,7 @@ import {
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { buildImgUrl } from "@/app/chat/files/images/utils";
 import { LlmList } from "@/components/llm/LLMList";
+import { useAssistants } from "@/components/context/AssistantsContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
@@ -105,7 +102,9 @@ export function AssistantEditor({
   shouldAddAssistantToUserPreferences?: boolean;
   admin?: boolean;
 }) {
+  const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
   const router = useRouter();
+
   const { popup, setPopup } = usePopup();
 
   const colorOptions = [
@@ -131,46 +130,17 @@ export function AssistantEditor({
     if (defaultIconShape === null) {
       setDefaultIconShape(generateRandomIconShape().encodedGrid);
     }
-  }, []);
+  }, [defaultIconShape]);
 
   const [isIconDropdownOpen, setIsIconDropdownOpen] = useState(false);
 
-  const [finalPrompt, setFinalPrompt] = useState<string | null>("");
-  const [finalPromptError, setFinalPromptError] = useState<string>("");
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
-
-  const triggerFinalPromptUpdate = async (
-    systemPrompt: string,
-    taskPrompt: string,
-    retrievalDisabled: boolean
-  ) => {
-    const response = await buildFinalPrompt(
-      systemPrompt,
-      taskPrompt,
-      retrievalDisabled
-    );
-    if (response.ok) {
-      setFinalPrompt((await response.json()).final_prompt_template);
-    }
-  };
 
   const isUpdate = existingPersona !== undefined && existingPersona !== null;
   const existingPrompt = existingPersona?.prompts[0] ?? null;
-
-  useEffect(() => {
-    if (isUpdate && existingPrompt) {
-      triggerFinalPromptUpdate(
-        existingPrompt.system_prompt,
-        existingPrompt.task_prompt,
-        existingPersona.num_chunks === 0
-      );
-    }
-  }, []);
-
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
   );
-  const defaultProviderName = defaultProvider?.provider;
   const defaultModelName = defaultProvider?.default_model_name;
   const providerDisplayNameToProviderName = new Map<string, string>();
   llmProviders.forEach((llmProvider) => {
@@ -191,15 +161,11 @@ export function AssistantEditor({
     modelOptionsByProvider.set(llmProvider.name, providerOptions);
   });
 
-  const providerSupportingImageGenerationExists =
-    providersContainImageGeneratingSupport(llmProviders);
-
   const personaCurrentToolIds =
     existingPersona?.tools.map((tool) => tool.id) || [];
+
   const searchTool = findSearchTool(tools);
-  const imageGenerationTool = providerSupportingImageGenerationExists
-    ? findImageGenerationTool(tools)
-    : undefined;
+  const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
 
   const customTools = tools.filter(
@@ -315,14 +281,6 @@ export function AssistantEditor({
             }
           )}
         onSubmit={async (values, formikHelpers) => {
-          if (finalPromptError) {
-            setPopup({
-              type: "error",
-              message: "Cannot submit while there are errors in the form",
-            });
-            return;
-          }
-
           if (
             values.llm_model_provider_override &&
             !values.llm_model_version_override
@@ -348,12 +306,9 @@ export function AssistantEditor({
 
           if (imageGenerationToolEnabled) {
             if (
-              !checkLLMSupportsImageOutput(
-                providerDisplayNameToProviderName.get(
-                  values.llm_model_provider_override || ""
-                ) ||
-                  defaultProviderName ||
-                  "",
+              // model must support image input for image generation
+              // to work
+              !checkLLMSupportsImageInput(
                 values.llm_model_version_override || defaultModelName || ""
               )
             ) {
@@ -439,6 +394,7 @@ export function AssistantEditor({
                 });
               }
             }
+            await refreshAssistants();
             router.push(
               redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
                 ? `/admin/assistants?u=${Date.now()}`
@@ -468,12 +424,9 @@ export function AssistantEditor({
               : false;
           }
 
-          const currentLLMSupportsImageOutput = checkLLMSupportsImageOutput(
-            providerDisplayNameToProviderName.get(
-              values.llm_model_provider_override || ""
-            ) ||
-              defaultProviderName ||
-              "",
+          // model must support image input for image generation
+          // to work
+          const currentLLMSupportsImageOutput = checkLLMSupportsImageInput(
             values.llm_model_version_override || defaultModelName || ""
           );
 
@@ -612,15 +565,13 @@ export function AssistantEditor({
                   align="start"
                   side="bottom"
                 />
-                <TooltipProvider delayDuration={50}>
+                <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
                       <FiInfo size={12} />
                     </TooltipTrigger>
                     <TooltipContent side="top" align="center">
-                      <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                        This icon will visually represent your Assistant
-                      </p>
+                      This icon will visually represent your Assistant
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -648,13 +599,7 @@ export function AssistantEditor({
                 placeholder="e.g. 'You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns'"
                 onChange={(e) => {
                   setFieldValue("system_prompt", e.target.value);
-                  triggerFinalPromptUpdate(
-                    e.target.value,
-                    values.task_prompt,
-                    searchToolEnabled()
-                  );
                 }}
-                error={finalPromptError}
               />
 
               <div>
@@ -662,16 +607,14 @@ export function AssistantEditor({
                   <div className="block  font-medium text-base">
                     Default AI Model{" "}
                   </div>
-                  <TooltipProvider delayDuration={50}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
                         <FiInfo size={12} />
                       </TooltipTrigger>
                       <TooltipContent side="top" align="center">
-                        <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                          Select a Large Language Model (Generative AI model) to
-                          power this Assistant
-                        </p>
+                        Select a Large Language Model (Generative AI model) to
+                        power this Assistant
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -681,7 +624,10 @@ export function AssistantEditor({
                   otherwise specified below.
                   {admin &&
                     user?.preferences.default_model &&
-                    `  Your current (user-specific) default model is ${getDisplayNameForModel(destructureValue(user?.preferences?.default_model!).modelName)}`}
+                    `  Your current (user-specific) default model is ${getDisplayNameForModel(
+                      destructureValue(user?.preferences?.default_model!)
+                        .modelName
+                    )}`}
                 </p>
                 {admin ? (
                   <div className="mb-2 flex items-starts">
@@ -756,16 +702,14 @@ export function AssistantEditor({
                   <div className="block font-medium text-base">
                     Capabilities{" "}
                   </div>
-                  <TooltipProvider delayDuration={50}>
+                  <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
                         <FiInfo size={12} />
                       </TooltipTrigger>
                       <TooltipContent side="top" align="center">
-                        <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                          You can give your assistant advanced capabilities like
-                          image generation
-                        </p>
+                        You can give your assistant advanced capabilities like
+                        image generation
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -776,12 +720,13 @@ export function AssistantEditor({
 
                 <div className="mt-4 flex flex-col gap-y-4  ml-1">
                   {imageGenerationTool && (
-                    <TooltipProvider delayDuration={50}>
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div
                             className={`w-fit ${
-                              !currentLLMSupportsImageOutput
+                              !currentLLMSupportsImageOutput ||
+                              !isImageGenerationAvailable
                                 ? "opacity-70 cursor-not-allowed"
                                 : ""
                             }`}
@@ -793,11 +738,14 @@ export function AssistantEditor({
                               onChange={() => {
                                 toggleToolInValues(imageGenerationTool.id);
                               }}
-                              disabled={!currentLLMSupportsImageOutput}
+                              disabled={
+                                !currentLLMSupportsImageOutput ||
+                                !isImageGenerationAvailable
+                              }
                             />
                           </div>
                         </TooltipTrigger>
-                        {!currentLLMSupportsImageOutput && (
+                        {!currentLLMSupportsImageOutput ? (
                           <TooltipContent side="top" align="center">
                             <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
                               To use Image Generation, select GPT-4o or another
@@ -805,13 +753,22 @@ export function AssistantEditor({
                               this Assistant.
                             </p>
                           </TooltipContent>
+                        ) : (
+                          !isImageGenerationAvailable && (
+                            <TooltipContent side="top" align="center">
+                              <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                                Image Generation requires an OpenAI or Azure
+                                Dalle configuration.
+                              </p>
+                            </TooltipContent>
+                          )
                         )}
                       </Tooltip>
                     </TooltipProvider>
                   )}
 
                   {searchTool && (
-                    <TooltipProvider delayDuration={50}>
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div
@@ -887,7 +844,7 @@ export function AssistantEditor({
                                               values.document_set_ids.indexOf(
                                                 documentSet.id
                                               );
-                                            let isSelected = ind !== -1;
+                                            const isSelected = ind !== -1;
                                             return (
                                               <DocumentSetSelectable
                                                 key={documentSet.id}
@@ -910,7 +867,7 @@ export function AssistantEditor({
                                     )}
                                   />
                                 ) : (
-                                  <Italic className="text-sm">
+                                  <p className="text-sm italic">
                                     No Document Sets available.{" "}
                                     {user?.role !== "admin" && (
                                       <>
@@ -919,7 +876,7 @@ export function AssistantEditor({
                                         Danswer for assistance.
                                       </>
                                     )}
-                                  </Italic>
+                                  </p>
                                 )}
 
                                 <div className="mt-4  flex flex-col gap-y-4">
@@ -1002,7 +959,7 @@ export function AssistantEditor({
                           alignTop={tool.description != null}
                           key={tool.id}
                           name={`enabled_tools_map.${tool.id}`}
-                          label={tool.name}
+                          label={tool.display_name}
                           subtext={tool.description}
                           onChange={() => {
                             toggleToolInValues(tool.id);
@@ -1013,7 +970,7 @@ export function AssistantEditor({
                   )}
                 </div>
               </div>
-              <Divider />
+              <Separator />
               <AdvancedOptionsToggle
                 showAdvancedOptions={showAdvancedOptions}
                 setShowAdvancedOptions={setShowAdvancedOptions}
@@ -1030,11 +987,6 @@ export function AssistantEditor({
                         placeholder="e.g. 'Remember to reference all of the points mentioned in my message to you and focus on identifying action items that can move things forward'"
                         onChange={(e) => {
                           setFieldValue("task_prompt", e.target.value);
-                          triggerFinalPromptUpdate(
-                            values.system_prompt,
-                            e.target.value,
-                            searchToolEnabled()
-                          );
                         }}
                         explanationText="Learn about prompting in our docs!"
                         explanationLink="https://docs.danswer.dev/guides/assistants"
@@ -1048,6 +1000,10 @@ export function AssistantEditor({
                         Starter Messages (Optional){" "}
                       </div>
                     </div>
+                    <SubLabel>
+                      Add pre-defined messages to help users get started. Only
+                      the first 4 will be displayed.
+                    </SubLabel>
                     <FieldArray
                       name="starter_messages"
                       render={(
@@ -1180,11 +1136,9 @@ export function AssistantEditor({
                                 message: "",
                               });
                             }}
-                            className="text-white mt-3"
-                            size="xs"
-                            type="button"
-                            icon={FiPlus}
-                            color="green"
+                            className="mt-3"
+                            size="sm"
+                            variant="next"
                           >
                             Add New
                           </Button>
@@ -1208,9 +1162,7 @@ export function AssistantEditor({
 
               <div className="flex">
                 <Button
-                  className="mx-auto"
-                  color="green"
-                  size="md"
+                  variant="submit"
                   type="submit"
                   disabled={isSubmitting || isRequestSuccessful}
                 >

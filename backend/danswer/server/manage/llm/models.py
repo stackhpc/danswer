@@ -21,6 +21,7 @@ class TestLLMRequest(BaseModel):
     # model level
     default_model_name: str
     fast_default_model_name: str | None = None
+    deployment_name: str | None = None
 
 
 class LLMProviderDescriptor(BaseModel):
@@ -66,6 +67,7 @@ class LLMProvider(BaseModel):
     is_public: bool = True
     groups: list[int] = Field(default_factory=list)
     display_model_names: list[str] | None = None
+    deployment_name: str | None = None
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -100,4 +102,5 @@ class FullLLMProvider(LLMProvider):
             ),
             is_public=llm_provider_model.is_public,
             groups=[group.id for group in llm_provider_model.groups],
+            deployment_name=llm_provider_model.deployment_name,
         )

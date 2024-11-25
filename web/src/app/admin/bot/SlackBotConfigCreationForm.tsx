@@ -16,11 +16,12 @@ import {
   isPersonaASlackBotPersona,
   updateSlackBotConfig,
 } from "./lib";
-import { Button, Card, Divider } from "@tremor/react";
+import { Separator } from "@/components/ui/separator";
+import CardSection from "@/components/admin/CardSection";
+import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Persona } from "../assistants/interfaces";
 import { useState } from "react";
-import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "../assistants/CollapsibleSection";
@@ -53,7 +54,7 @@ export const SlackBotCreationForm = ({
 
   return (
     <div>
-      <Card>
+      <CardSection>
         {popup}
         <Formik
           initialValues={{
@@ -229,7 +230,7 @@ export const SlackBotCreationForm = ({
                                 const ind = values.document_sets.indexOf(
                                   documentSet.id
                                 );
-                                let isSelected = ind !== -1;
+                                const isSelected = ind !== -1;
 
                                 return (
                                   <DocumentSetSelectable
@@ -260,7 +261,7 @@ export const SlackBotCreationForm = ({
                   </div>
                 </div>
 
-                <Divider />
+                <Separator />
 
                 <AdvancedOptionsToggle
                   showAdvancedOptions={showAdvancedOptions}
@@ -369,6 +370,7 @@ export const SlackBotCreationForm = ({
                 <div className="flex">
                   <Button
                     type="submit"
+                    variant="submit"
                     disabled={isSubmitting}
                     className="mx-auto w-64"
                   >
@@ -379,7 +381,7 @@ export const SlackBotCreationForm = ({
             </Form>
           )}
         </Formik>
-      </Card>
+      </CardSection>
     </div>
   );
 };

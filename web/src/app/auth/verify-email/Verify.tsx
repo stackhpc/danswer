@@ -2,8 +2,8 @@
 
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Text } from "@tremor/react";
+import { useCallback, useEffect, useState } from "react";
+import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
 import { Logo } from "@/components/Logo";
@@ -14,7 +14,7 @@ export function Verify({ user }: { user: User | null }) {
 
   const [error, setError] = useState("");
 
-  async function verify() {
+  const verify = useCallback(async () => {
     const token = searchParams.get("token");
     if (!token) {
       setError(
@@ -39,11 +39,11 @@ export function Verify({ user }: { user: User | null }) {
         `Failed to verify your email - ${errorDetail}. Please try requesting a new verification email.`
       );
     }
-  }
+  }, [searchParams, router]);
 
   useEffect(() => {
     verify();
-  }, []);
+  }, [verify]);
 
   return (
     <main>

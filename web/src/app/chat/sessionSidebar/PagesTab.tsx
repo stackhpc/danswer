@@ -7,7 +7,7 @@ import { Folder } from "../folders/interfaces";
 import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { pageType } from "./types";
 
 export function PagesTab({
@@ -23,7 +23,7 @@ export function PagesTab({
 }: {
   page: pageType;
   existingChats?: ChatSession[];
-  currentChatId?: number;
+  currentChatId?: string;
   folders?: Folder[];
   openedFolders?: { [key: number]: boolean };
   closeSidebar?: () => void;
@@ -44,10 +44,7 @@ export function PagesTab({
   ) => {
     event.preventDefault();
     setIsDragOver(false); // Reset drag over state on drop
-    const chatSessionId = parseInt(
-      event.dataTransfer.getData(CHAT_SESSION_ID_KEY),
-      10
-    );
+    const chatSessionId = event.dataTransfer.getData(CHAT_SESSION_ID_KEY);
     const folderId = event.dataTransfer.getData(FOLDER_ID_KEY);
 
     if (folderId) {
