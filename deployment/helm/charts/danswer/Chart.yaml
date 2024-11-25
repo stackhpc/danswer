@@ -5,7 +5,7 @@ home: https://www.danswer.ai/
 sources:
   - "https://github.com/stackhpc/danswer"
 type: application
-version: 0.2.4-prerelease.2
+version: 0.2.4
 appVersion: v0.12.0
 dependencies:
   - name: postgresql
