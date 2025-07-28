@@ -74,7 +74,8 @@ spec:
         - -n
         - {{ .Release.Name }}
         - pvc
-        - --all
+        - {{ .Values.indexCapability.indexingModelPVC.name }}
+        - {{ .Values.inferenceCapability.pvc.name }}
       restartPolicy: Never
       serviceAccountName: default
 ---
